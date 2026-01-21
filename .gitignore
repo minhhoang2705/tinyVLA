@@ -1,0 +1,154 @@
+# Python artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+.venv
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+virtualenv/
+
+# IDE and editor configs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+.project
+.pydevproject
+.settings/
+*.sublime-workspace
+*.sublime-project
+.vim/
+.emacs.d/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+.envrc
+
+# Model checkpoints and weights
+checkpoints/
+*.ckpt
+*.pth
+*.pt
+*.pb
+*.h5
+*.onnx
+weights/
+models/
+pretrained_models/
+saved_models/
+
+# Data directories
+data/
+datasets/
+raw_data/
+processed_data/
+*.tar.gz
+*.zip
+*.rar
+
+# Experiment outputs and logs
+logs/
+runs/
+outputs/
+experiments/
+results/
+wandb/
+mlruns/
+.wandb/
+lightning_logs/
+
+# Jupyter and IPython
+.ipynb_checkpoints
+.ipython/
+*.ipynb
+.jupyter/
+
+# pytest and testing
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.hypothesis/
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# System files
+Thumbs.db
+*.lnk
+.AppleDouble
+.LSOverride
+*.swp
+*.swo
+
+# IDE specific
+*.iml
+.gradle
+.idea/
+local.properties
+
+# OS
+.DS_Store
+*.log
+*.pid
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.backup
+*~
+\#*\#
+.\#*
+
+# Research specific
+scratch/
+temp/
+tmp/
+debug/
+notes/
+
+# Package managers
+poetry.lock
+Pipfile.lock
+requirements-lock.txt
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Miscellaneous
+.cache/
+.mypy_cache/
+.ruff_cache/
