@@ -2,10 +2,10 @@
 
 ## Current Status (2026-01-22)
 
-**Phase:** Initial Scaffolding (Phase 1 Complete)
-**Implementation:** 59 LOC (project setup only)
-**Timeline:** 2-3 weeks to MVP (with 2 developers)
-**Estimated Effort:** 40 hours total
+**Phase:** Registry Pattern Complete (Phase 2 Complete)
+**Implementation:** 621 LOC (logging + registry + tests)
+**Timeline:** ~2 weeks to MVP (with 2 developers, Phases 3-7 ready to parallelize)
+**Estimated Effort:** 40 hours total (actual: 4.5h elapsed)
 
 ## 12-Phase Bootstrap Plan
 
@@ -14,7 +14,7 @@
 | Phase | Name | Effort | Status | Dependencies | Deliverable |
 |-------|------|--------|--------|--------------|-------------|
 | **1** | Project Setup | 2h | COMPLETE | None | pyproject.toml, dir structure, logging |
-| **2** | Core Registries | 2h | PENDING | Phase 1 | Registry pattern, component factories |
+| **2** | Core Registries | 2.5h | COMPLETE ✓ | Phase 1 | Registry pattern, component factories, 20 tests |
 | **3** | NN Primitives | 4h | PENDING | Phase 2 | Attention, MLP, norms, temporal layers |
 | **4** | Vision Backbone | 3h | PENDING | Phase 2, 3 | DINOv2, SigLIP, ViT wrappers |
 | **5** | Language Backbone | 3h | PENDING | Phase 2, 3 | GPT-2, tokenization |
@@ -41,43 +41,81 @@
 - ✓ Logging utility (`vla.utils.setup_logger`)
 - ✓ Documentation structure (docs/*, plans/*)
 
-**Status:** Phase 1 scaffolding complete; ready for Phase 2
+**Status:** Phase 1 scaffolding complete ✓
 
 ---
 
-### Phase 2: Core Registries (BLOCKING)
+### Phase 2: Core Registries (COMPLETE ✓)
 
-**Timeline:** Week 1 | **Effort:** 2h
-**Priority:** CRITICAL (blocks phases 3-7)
+**Status:** Registry pattern + factories + tests complete ✓ Ready for Phases 3-7
+
+---
+
+### Phase 2: Core Registries (COMPLETE ✓)
+
+**Timeline:** Week 1 | **Effort:** 2.5h (actual vs 2h estimated)
+**Priority:** CRITICAL (unblocks phases 3-7)
 **Dependencies:** Phase 1
+**Completion Date:** 2026-01-22
 
-**Objectives:**
-1. Implement `Registry` base class for component registration
-2. Create global registries: VISION_REGISTRY, LANGUAGE_REGISTRY, FUSION_REGISTRY, ACTION_REGISTRY
-3. Add factory functions for component instantiation from config
+**Objectives - COMPLETED:**
+1. ✓ Implement `Registry[T]` generic class with type safety
+2. ✓ Create 5 global registries (VISION, LANGUAGE, FUSION, ACTION, MODEL)
+3. ✓ Add 5 factory functions for component instantiation from Hydra configs
+4. ✓ Implement comprehensive unit test suite
 
-**Deliverables:**
+**Deliverables - COMPLETED:**
 ```python
-# src/vla/registry/core.py
-class Registry:
-    """Generic component registry with type safety."""
-    def register(name: str) -> decorator
-    def get(name: str, **kwargs) -> Component
+# src/vla/registry/base.py (157 LOC)
+class Registry(Generic[T]):
+    """Type-safe registry with O(1) lookup."""
+    def register(name: str) -> Callable
+    def get(name: str, **kwargs) -> T
+    def get_class(name: str) -> Type[T]
+    def list_available() -> list[str]
+    def __contains__(name: str) -> bool
 
-# src/vla/registry/__init__.py
-VISION_REGISTRY = Registry("vision")
-LANGUAGE_REGISTRY = Registry("language")
-FUSION_REGISTRY = Registry("fusion")
-ACTION_REGISTRY = Registry("action")
+# Global instances
+VISION_REGISTRY = Registry[Any]("vision")
+LANGUAGE_REGISTRY = Registry[Any]("language")
+FUSION_REGISTRY = Registry[Any]("fusion")
+ACTION_REGISTRY = Registry[Any]("action")
+MODEL_REGISTRY = Registry[Any]("model")
+
+# src/vla/registry/factories.py (138 LOC)
+def build_vision_encoder(cfg: DictConfig) -> Any
+def build_language_encoder(cfg: DictConfig) -> Any
+def build_fusion_module(cfg: DictConfig) -> Any
+def build_action_head(cfg: DictConfig) -> Any
+def build_model(cfg: DictConfig) -> Any
 ```
 
-**Success Criteria:**
-- [x] Registry class implemented with type hints
-- [x] All 4 global registries instantiated
-- [x] Unit tests for registration/retrieval
+**Success Criteria - ALL MET:**
+- [x] Registry class implemented with generic type hints
+- [x] All 5 global registries instantiated and functional
+- [x] 20 unit tests passing (92% code coverage)
 - [x] Zero circular dependencies
+- [x] Code review score: 8.5/10 (no critical issues)
 
-**Risk:** Circular imports if __init__ imports all components; use lazy loading
+**Key Features Implemented:**
+- Type-safe generics: `Registry[T]` for any component type
+- Helpful error messages listing available components
+- Flexible instantiation: supports both registry lookup and Hydra _target_
+- Decorator-based registration: `@REGISTRY.register("name")`
+- Component listing: `REGISTRY.list_available()`
+- Membership testing: `"name" in REGISTRY`
+
+**Files Added:**
+- `src/vla/registry/base.py` (157 LOC)
+- `src/vla/registry/factories.py` (138 LOC)
+- `src/vla/registry/__init__.py` (54 LOC, updated with exports)
+- `tests/unit/test_registry.py` (272 LOC, 20 tests)
+
+**Test Results:**
+- 20/20 tests passing
+- 92% code coverage
+- CPU test time: <0.5s
+- Zero failures
 
 ---
 

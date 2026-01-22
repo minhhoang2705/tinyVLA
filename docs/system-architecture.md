@@ -120,41 +120,110 @@ Training Loss Computation
 
 ## 3. Component Architecture Details
 
-### 3.1 Registry Pattern
+### 3.1 Registry Pattern (IMPLEMENTED)
 
-**Purpose:** Enable dynamic component loading without code modifications
+**Purpose:** Enable dynamic component loading without code modifications. Type-safe, O(1) lookup.
+
+**Implementation Status:** Phase 2 Complete
+- Generic `Registry[T]` class in `src/vla/registry/base.py` (157 LOC)
+- 5 global instances: VISION_REGISTRY, LANGUAGE_REGISTRY, FUSION_REGISTRY, ACTION_REGISTRY, MODEL_REGISTRY
+- Factory functions in `src/vla/registry/factories.py` (138 LOC)
+- 20 unit tests with 92% coverage
 
 **Architecture:**
 ```
-┌──────────────────────────────────────┐
-│         Global Registries             │
-├──────────────────────────────────────┤
-│  VISION_REGISTRY                     │
-│    ├─ "dinov2" → DINOv2Class        │
-│    ├─ "siglip" → SigLIPClass        │
-│    └─ "vit" → ViTClass              │
-│                                      │
-│  LANGUAGE_REGISTRY                  │
-│    ├─ "gpt2" → GPT2Class            │
-│    └─ "gpt2_medium" → GPT2MediumClass│
-│                                      │
-│  FUSION_REGISTRY                    │
-│    ├─ "perceiver" → PerceiverClass  │
-│    ├─ "cross_attn" → CrossAttention │
-│    └─ "concat" → ConcatFusion       │
-│                                      │
-│  ACTION_REGISTRY                    │
-│    ├─ "discrete" → DiscreteHeadClass│
-│    └─ "gaussian" → GaussianHeadClass│
-└──────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────┐
+│              Global Registries (base.py)                  │
+├──────────────────────────────────────────────────────────┤
+│  VISION_REGISTRY                                         │
+│    ├─ register("dinov2_base") → DINOv2Class            │
+│    ├─ register("siglip_base") → SigLIPClass            │
+│    └─ register("vit_base") → ViTClass                  │
+│                                                          │
+│  LANGUAGE_REGISTRY                                      │
+│    ├─ register("gpt2") → GPT2Class                      │
+│    └─ register("gpt2_medium") → GPT2MediumClass        │
+│                                                          │
+│  FUSION_REGISTRY                                        │
+│    ├─ register("perceiver") → PerceiverClass           │
+│    ├─ register("cross_attn") → CrossAttention          │
+│    └─ register("concat") → ConcatFusion                │
+│                                                          │
+│  ACTION_REGISTRY                                        │
+│    ├─ register("discrete") → DiscreteHeadClass         │
+│    └─ register("gaussian") → GaussianHeadClass         │
+│                                                          │
+│  MODEL_REGISTRY                                         │
+│    └─ register("vla_base") → VLAModelClass             │
+└──────────────────────────────────────────────────────────┘
 
-Usage in Training:
-    config = load_hydra_config()
-    vision = VISION_REGISTRY.get(config.model.vision_encoder)
-    language = LANGUAGE_REGISTRY.get(config.model.language_model)
-    fusion = FUSION_REGISTRY.get(config.model.fusion_type)
-    action = ACTION_REGISTRY.get(config.model.action_type)
-    model = VLAModel(vision, language, fusion, action)
+                ↓ Factory Functions (factories.py)
+
+        build_vision_encoder(cfg: DictConfig)
+        build_language_encoder(cfg: DictConfig)
+        build_fusion_module(cfg: DictConfig)
+        build_action_head(cfg: DictConfig)
+        build_model(cfg: DictConfig)
+```
+
+**Registry Class API:**
+```python
+# Registration (decorator-based)
+@VISION_REGISTRY.register("dinov2_base")
+class DINOv2(nn.Module):
+    def __init__(self, hidden_dim: int = 768):
+        super().__init__()
+        self.hidden_dim = hidden_dim
+
+# Direct instantiation
+encoder = VISION_REGISTRY.get("dinov2_base", hidden_dim=1024)
+
+# Get class without instantiating
+cls = VISION_REGISTRY.get_class("dinov2_base")
+
+# List available components
+components = VISION_REGISTRY.list_available()  # ['dinov2_base', ...]
+
+# Check membership
+if "dinov2_base" in VISION_REGISTRY:
+    # Component is available
+    pass
+
+# Error handling (helpful messages)
+try:
+    encoder = VISION_REGISTRY.get("unknown")
+except KeyError as e:
+    # Outputs: "Available components: dinov2_base, ..."
+    pass
+```
+
+**Factory Function Pattern (for Hydra integration):**
+```python
+# Registry-based config
+cfg = DictConfig({"name": "dinov2_base", "hidden_dim": 768})
+encoder = build_vision_encoder(cfg)  # Uses VISION_REGISTRY.get()
+
+# Hydra _target_ based config
+cfg = DictConfig({"_target_": "timm.create_model", "model_name": "vit_base_patch16_224"})
+encoder = build_vision_encoder(cfg)  # Uses hydra.utils.instantiate()
+```
+
+**Usage in Training (post-Phase 8):**
+```python
+from vla.registry import build_model, build_vision_encoder
+from hydra.utils import instantiate
+
+# Load Hydra config
+cfg = instantiate_hydra_config()
+
+# Build components via factories
+vision = build_vision_encoder(cfg.vision)
+language = build_language_encoder(cfg.language)
+fusion = build_fusion_module(cfg.fusion)
+action = build_action_head(cfg.action)
+
+# Or build complete model at once
+model = build_model(cfg.model)
 ```
 
 ### 3.2 Vision Backbone

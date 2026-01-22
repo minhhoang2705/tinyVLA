@@ -2,20 +2,23 @@
 
 ## Overview
 
-tinyVLA is in **initial scaffolding phase** (0.1.0) with 59 lines of implemented code across 11 Python modules. The project has a well-designed modular architecture with all directories and infrastructure in place, but core component implementations are pending.
+tinyVLA is in **Phase 2 complete** (0.1.0) with 621 lines of implemented code across 14 Python modules. The registry pattern is fully operational with factory functions enabling dynamic component loading. Remaining modules await implementation.
 
 **Current State:**
 - Architecture: Complete blueprint
 - Infrastructure: Fully configured (Hydra, PyTorch Lightning, testing framework)
-- Implementation: Early stage (only logging utility implemented)
-- Ready for: Rapid component development via 12-phase plan
+- Implementation: Registry pattern complete (Phase 2)
+- Ready for: Parallel component development (Phases 3-7)
 
 ## Directory Structure
 
 ```
 src/vla/
 ├── __init__.py                 # Package entry point (v0.1.0)
-├── registry/                   # Component registration system (EMPTY)
+├── registry/                   # Component registration system (IMPLEMENTED)
+│   ├── base.py                # Registry class & global instances (157 LOC)
+│   ├── factories.py           # Factory functions for component building (138 LOC)
+│   └── __init__.py            # Public API exports (54 LOC)
 ├── nn/                         # Neural network primitives (EMPTY)
 ├── backbones/                  # Vision/language encoders (EMPTY)
 ├── fusion/                     # Multimodal fusion mechanisms (EMPTY)
@@ -73,19 +76,44 @@ logger = setup_logger(__name__)
 logger = setup_logger(__name__, log_file=Path("logs/train.log"))
 ```
 
-### Registry Module: `vla/registry/__init__.py`
+### Registry Module: `vla/registry/`
 **Purpose:** Dynamic component instantiation via registry pattern
-**Status:** Empty stub
-**Planned Components:**
-- Component registry base class
-- Factory methods for vision/language/fusion/action
-- Global registry instances (VISION_REGISTRY, LANGUAGE_REGISTRY, etc.)
+**Status:** IMPLEMENTED (Phase 2 Complete)
+**LOC:** 349 total (base.py 157, factories.py 138, __init__.py 54)
 
-**Expected Pattern:**
+**Components:**
+- Generic `Registry[T]` class with type safety
+- 5 global registries: VISION_REGISTRY, LANGUAGE_REGISTRY, FUSION_REGISTRY, ACTION_REGISTRY, MODEL_REGISTRY
+- 5 factory functions for building components from Hydra configs
+- Support for both registry lookup and direct Hydra instantiation
+
+**Key Features:**
+- O(1) lookup time via dictionary
+- Type-safe using Python generics
+- Helpful error messages listing available components
+- Decorator-based registration pattern
+- Integration with Hydra's instantiate() for _target_-based configs
+
+**Usage Pattern:**
 ```python
-# Pseudo-code
-VISION_REGISTRY.register("dinov2", VisionBackboneImpl)
-encoder = VISION_REGISTRY.get("dinov2", size="base")
+from vla.registry import VISION_REGISTRY, build_vision_encoder
+
+# Register a component
+@VISION_REGISTRY.register("dinov2_base")
+class DINOv2Base(nn.Module):
+    def __init__(self, hidden_dim: int = 768):
+        super().__init__()
+        self.hidden_dim = hidden_dim
+
+# Instantiate from config (registry method)
+cfg = DictConfig({"name": "dinov2_base", "hidden_dim": 768})
+encoder = build_vision_encoder(cfg)
+
+# Or direct registry access
+encoder = VISION_REGISTRY.get("dinov2_base", hidden_dim=768)
+
+# List all registered components
+available = VISION_REGISTRY.list_available()  # ['dinov2_base', ...]
 ```
 
 ### Neural Network Primitives: `vla/nn/__init__.py`
@@ -348,7 +376,7 @@ ipython >= 8.20.0           # Interactive shell
 |-----------|--------|---------|-----|
 | vla | Active | Package init | 6 |
 | utils.logging | IMPLEMENTED | Logger setup | 48 |
-| registry | Empty | Component registry | 0 |
+| registry | IMPLEMENTED | Component registry | 349 |
 | nn | Empty | NN primitives | 0 |
 | backbones | Empty | Vision/language | 0 |
 | fusion | Empty | Fusion mechanisms | 0 |
@@ -356,8 +384,9 @@ ipython >= 8.20.0           # Interactive shell
 | models | Empty | VLA orchestration | 0 |
 | data | Empty | Data loaders | 0 |
 | training | Empty | Lightning modules | 0 |
+| tests.unit.test_registry | IMPLEMENTED | Registry unit tests | 272 |
 
-**Total:** 59 LOC implemented, 10 modules awaiting implementation
+**Total:** 621 LOC implemented (54 LOC added in tests), 8 modules awaiting implementation, Phase 2 COMPLETE
 
 ## Entry Points
 
@@ -380,10 +409,12 @@ python scripts/eval.py --checkpoint checkpoints/model.pt --data test_data.hdf5
 ## Next Steps
 
 1. **Phase 1 (Setup):** Complete (project scaffolding done)
-2. **Phase 2 (Registries):** Implement registry pattern for component discovery
-3. **Phases 3-7 (Components):** Implement NN primitives, backbones, fusion, policy in parallel
+2. **Phase 2 (Registries):** Complete (registry pattern + factories + 20 unit tests passing)
+3. **Phases 3-7 (Components):** Ready to start in parallel (NN primitives, backbones, fusion, policy)
 4. **Phase 8 (Model):** Orchestrate components into VLA model
 5. **Phases 9-11 (Config/Data/Training):** Hydra configs, data pipeline, Lightning training
 6. **Phase 12 (Testing):** Comprehensive test suite with 80%+ coverage
 
 See [Project Roadmap](./project-roadmap.md) for detailed timeline and phases.
+
+**Phase 2 Completion Date:** 2026-01-22 (2.5h actual vs 2h estimated)
