@@ -67,7 +67,7 @@ class SinusoidalPositionEncoding(nn.Module):
         Returns:
             Input with added positional encoding [batch, seq_len, dim]
         """
-        return x + self.pe[:, : x.size(1)]
+        return x + self.pe[:, : x.size(1)]  # type: ignore
 
 
 class LearnablePositionEncoding(nn.Module):
@@ -112,7 +112,7 @@ class LearnablePositionEncoding(nn.Module):
 
         # Create position indices [0, 1, 2, ..., seq_len-1]
         positions = torch.arange(seq_len, device=x.device)
-        return x + self.pe(positions)
+        return x + self.pe(positions)  # type: ignore
 
 
 class RotaryPositionEncoding(nn.Module):
@@ -158,7 +158,7 @@ class RotaryPositionEncoding(nn.Module):
             seq_len: Sequence length to cache
         """
         # Position indices [0, 1, 2, ..., seq_len-1]
-        t = torch.arange(seq_len, device=self.inv_freq.device)
+        t = torch.arange(seq_len, device=self.inv_freq.device)  # type: ignore
         # Outer product: [seq_len, dim/2]
         freqs = torch.einsum("i,j->ij", t, self.inv_freq)
         # Concatenate for even/odd indices: [seq_len, dim]
@@ -186,8 +186,8 @@ class RotaryPositionEncoding(nn.Module):
             self._build_cache(seq_len)
 
         # Get cached cos/sin for current sequence length
-        cos = self.cos_cached[:, :, :seq_len, :]
-        sin = self.sin_cached[:, :, :seq_len, :]
+        cos = self.cos_cached[:, :, :seq_len, :]  # type: ignore
+        sin = self.sin_cached[:, :, :seq_len, :]  # type: ignore
 
         # Apply rotation to both q and k
         return self._apply_rotary(q, cos, sin), self._apply_rotary(k, cos, sin)

@@ -40,7 +40,7 @@ def build_vision_encoder(cfg: DictConfig) -> Any:
         return instantiate(cfg)
     name = cfg.name
     kwargs = {k: v for k, v in cfg.items() if k != "name"}
-    return VISION_REGISTRY.get(name, **kwargs)
+    return VISION_REGISTRY.get(name, **kwargs)  # type: ignore
 
 
 def build_language_encoder(cfg: DictConfig) -> Any:
@@ -62,7 +62,7 @@ def build_language_encoder(cfg: DictConfig) -> Any:
         return instantiate(cfg)
     name = cfg.name
     kwargs = {k: v for k, v in cfg.items() if k != "name"}
-    return LANGUAGE_REGISTRY.get(name, **kwargs)
+    return LANGUAGE_REGISTRY.get(name, **kwargs)  # type: ignore
 
 
 def build_fusion_module(cfg: DictConfig) -> Any:
@@ -84,7 +84,7 @@ def build_fusion_module(cfg: DictConfig) -> Any:
         return instantiate(cfg)
     name = cfg.name
     kwargs = {k: v for k, v in cfg.items() if k != "name"}
-    return FUSION_REGISTRY.get(name, **kwargs)
+    return FUSION_REGISTRY.get(name, **kwargs)  # type: ignore
 
 
 def build_action_head(cfg: DictConfig) -> Any:
@@ -106,7 +106,7 @@ def build_action_head(cfg: DictConfig) -> Any:
         return instantiate(cfg)
     name = cfg.name
     kwargs = {k: v for k, v in cfg.items() if k != "name"}
-    return ACTION_REGISTRY.get(name, **kwargs)
+    return ACTION_REGISTRY.get(name, **kwargs)  # type: ignore
 
 
 def build_model(cfg: DictConfig) -> Any:
@@ -135,4 +135,4 @@ def build_model(cfg: DictConfig) -> Any:
         return instantiate(cfg)
     name = cfg.name
     kwargs = {k: v for k, v in cfg.items() if k != "name"}
-    return MODEL_REGISTRY.get(name, **kwargs)
+    return MODEL_REGISTRY.get(name, **kwargs)  # type: ignore

@@ -75,7 +75,7 @@ class MLP(nn.Module):
         x = self.act(x)
         x = self.dropout(x)
         x = self.fc2(x)
-        return self.dropout(x)
+        return self.dropout(x)  # type: ignore
 
 
 class GatedMLP(nn.Module):
@@ -125,4 +125,4 @@ class GatedMLP(nn.Module):
         x = gate * self.up_proj(x)
         # Project back to original dimension
         x = self.down_proj(x)
-        return self.dropout(x)
+        return self.dropout(x)  # type: ignore

@@ -125,7 +125,7 @@ class MultiHeadAttention(nn.Module):
 
         # Merge heads and project output
         x = rearrange(x, "b h n d -> b n (h d)")
-        return self.proj(x)
+        return self.proj(x)  # type: ignore
 
 
 class CrossAttention(nn.Module):
@@ -193,4 +193,4 @@ class CrossAttention(nn.Module):
         # Use Flash Attention for cross-attention
         x = F.scaled_dot_product_attention(q, k, v)
         x = rearrange(x, "b h n d -> b n (h d)")
-        return self.proj(x)
+        return self.proj(x)  # type: ignore

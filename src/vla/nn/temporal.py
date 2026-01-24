@@ -111,7 +111,7 @@ class CausalConv1d(nn.Module):
         """
         # Pad only on the left (past)
         x = nn.functional.pad(x, (self.padding, 0))
-        return self.conv(x)
+        return self.conv(x)  # type: ignore
 
 
 class TemporalBlock(nn.Module):
