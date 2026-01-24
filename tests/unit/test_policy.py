@@ -39,7 +39,7 @@ class TestActionUtils:
         actions = torch.tensor([[-1.0, 0.0, 1.0]])
         bins = continuous_to_bins(actions, num_bins=256)
         assert bins[0, 0].item() == 0  # -1.0 -> bin 0
-        assert bins[0, 1].item() == 127  # 0.0 -> bin 127
+        assert bins[0, 1].item() == 128  # 0.0 -> bin 128 (banker's rounding: 127.5 → 128)
         assert bins[0, 2].item() == 255  # 1.0 -> bin 255
 
     def test_action_normalizer(self):

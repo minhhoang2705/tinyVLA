@@ -9,11 +9,13 @@ Why these implementations:
 - CrossAttention: Attends from one modality to another (e.g., language to vision)
 - Flash Attention: Uses PyTorch's scaled_dot_product_attention when available
 """
+
+from typing import Optional
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from einops import rearrange
-from typing import Optional
 
 from vla.utils import setup_logger
 
@@ -56,7 +58,7 @@ class MultiHeadAttention(nn.Module):
         self.dim = dim
         self.num_heads = num_heads
         self.head_dim = dim // num_heads
-        self.scale = self.head_dim ** -0.5  # Scaling factor for attention scores
+        self.scale = self.head_dim**-0.5  # Scaling factor for attention scores
 
         # Check if Flash Attention is available
         self.use_flash = use_flash and hasattr(F, "scaled_dot_product_attention")
@@ -89,14 +91,15 @@ class MultiHeadAttention(nn.Module):
         # Project to Q, K, V and split into heads
         # Shape: [3, batch, num_heads, seq_len, head_dim]
         qkv = self.qkv(x)
-        qkv = rearrange(qkv, "b n (three h d) -> three b h n d",
-                        three=3, h=self.num_heads)
+        qkv = rearrange(qkv, "b n (three h d) -> three b h n d", three=3, h=self.num_heads)
         q, k, v = qkv.unbind(0)
 
         if self.use_flash:
             # Use Flash Attention (memory-efficient, 2-4x faster)
             x = F.scaled_dot_product_attention(
-                q, k, v,
+                q,
+                k,
+                v,
                 attn_mask=attn_mask,
                 dropout_p=self.dropout.p if self.training else 0.0,
                 is_causal=is_causal,
@@ -160,7 +163,7 @@ class CrossAttention(nn.Module):
 
         self.num_heads = num_heads
         self.head_dim = dim // num_heads
-        self.scale = self.head_dim ** -0.5
+        self.scale = self.head_dim**-0.5
 
         # Separate projections for query (from x) and key/value (from context)
         self.to_q = nn.Linear(dim, dim)
@@ -184,8 +187,7 @@ class CrossAttention(nn.Module):
         q = rearrange(self.to_q(x), "b n (h d) -> b h n d", h=self.num_heads)
 
         # Project keys and values from context
-        kv = rearrange(self.to_kv(context), "b m (two h d) -> two b h m d",
-                       two=2, h=self.num_heads)
+        kv = rearrange(self.to_kv(context), "b m (two h d) -> two b h m d", two=2, h=self.num_heads)
         k, v = kv.unbind(0)
 
         # Use Flash Attention for cross-attention

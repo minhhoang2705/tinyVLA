@@ -1,8 +1,8 @@
 """Pytest configuration and shared fixtures."""
 
+
 import pytest
 import torch
-from typing import List
 
 
 @pytest.fixture

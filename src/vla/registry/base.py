@@ -53,9 +53,7 @@ class Registry(Generic[T]):
 
         def wrapper(cls: Type[T]) -> Type[T]:
             if name in self._registry:
-                raise ValueError(
-                    f"Component '{name}' already registered in {self._name} registry"
-                )
+                raise ValueError(f"Component '{name}' already registered in {self._name} registry")
             self._registry[name] = cls
             return cls
 

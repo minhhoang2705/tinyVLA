@@ -13,21 +13,21 @@ Tests cover:
 import pytest
 import torch
 import torch.nn as nn
-from vla.nn import (
-    MultiHeadAttention,
-    CrossAttention,
-    MLP,
-    GatedMLP,
-    RMSNorm,
-    get_norm,
-    SinusoidalPositionEncoding,
-    LearnablePositionEncoding,
-    RotaryPositionEncoding,
-    FrameStacker,
-    CausalConv1d,
-    TemporalBlock,
-)
 
+from vla.nn import (
+    MLP,
+    CausalConv1d,
+    CrossAttention,
+    FrameStacker,
+    GatedMLP,
+    LearnablePositionEncoding,
+    MultiHeadAttention,
+    RMSNorm,
+    RotaryPositionEncoding,
+    SinusoidalPositionEncoding,
+    TemporalBlock,
+    get_norm,
+)
 
 # ============================================================================
 # Fixtures for shared test data
@@ -135,9 +135,7 @@ class TestMultiHeadAttention:
         x = torch.randn(batch_size, seq_len, model_dim)
 
         # Create attention mask (allow attending to everything)
-        attn_mask = torch.ones(
-            batch_size, 1, seq_len, seq_len, dtype=torch.bool, device=x.device
-        )
+        attn_mask = torch.ones(batch_size, 1, seq_len, seq_len, dtype=torch.bool, device=x.device)
         # Mask out the last token
         attn_mask[:, :, :, -1] = False
 
@@ -377,7 +375,7 @@ class TestRMSNorm:
         out = norm(x)
 
         # Compute RMS of output (should be close to 1)
-        rms = torch.sqrt((out ** 2).mean(dim=-1))
+        rms = torch.sqrt((out**2).mean(dim=-1))
         assert rms.mean().item() > 0.5, "Output RMS should be normalized"
 
     def test_rmsnorm_gradient_flow(self, batch_size: int, seq_len: int):

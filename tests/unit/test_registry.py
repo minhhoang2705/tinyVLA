@@ -295,9 +295,7 @@ class TestFactoryFunctions:
 
         sys.modules[__name__].HydraTestModule = HydraTestModule
 
-        cfg = DictConfig(
-            {"_target_": "tests.unit.test_registry.HydraTestModule", "value": 999}
-        )
+        cfg = DictConfig({"_target_": "tests.unit.test_registry.HydraTestModule", "value": 999})
 
         module = build_vision_encoder(cfg)
         assert isinstance(module, HydraTestModule)

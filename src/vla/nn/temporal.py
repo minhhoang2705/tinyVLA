@@ -8,9 +8,11 @@ Why these implementations:
 - CausalConv1d: 1D convolution that doesn't look into the future
 - TemporalBlock: Transformer block with causal masking for autoregressive modeling
 """
+
+from typing import List
+
 import torch
 import torch.nn as nn
-from typing import List
 
 
 class FrameStacker(nn.Module):
@@ -52,9 +54,7 @@ class FrameStacker(nn.Module):
             ValueError: If number of frames doesn't match num_frames
         """
         if len(frames) != self.num_frames:
-            raise ValueError(
-                f"Expected {self.num_frames} frames, got {len(frames)}"
-            )
+            raise ValueError(f"Expected {self.num_frames} frames, got {len(frames)}")
 
         B = frames[0].size(0)
         stacked = []
@@ -63,7 +63,7 @@ class FrameStacker(nn.Module):
         for t, frame in enumerate(frames):
             # Get temporal embedding for this time step
             # Shape: [1, 1, dim] -> broadcast to [batch, num_patches, dim]
-            temporal_pos = self.temporal_embed.weight[t:t+1].unsqueeze(0).expand(B, -1, -1)
+            temporal_pos = self.temporal_embed.weight[t : t + 1].unsqueeze(0).expand(B, -1, -1)
             # Add temporal embedding to frame features
             stacked.append(frame + temporal_pos)
 

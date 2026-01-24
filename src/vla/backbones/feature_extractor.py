@@ -98,9 +98,7 @@ class MultiScaleFeatureExtractor(nn.Module):
             Hook function
         """
 
-        def hook(
-            module: nn.Module, input: tuple[torch.Tensor, ...], output: torch.Tensor
-        ) -> None:
+        def hook(module: nn.Module, input: tuple[torch.Tensor, ...], output: torch.Tensor) -> None:
             self._features[layer_idx] = output
 
         return hook

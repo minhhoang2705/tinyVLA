@@ -8,9 +8,11 @@ Why these implementations:
 - Standard MLP: Used in original Transformer, ViT, BERT
 - GatedMLP (SwiGLU): Used in modern LLMs like LLaMA - better performance
 """
+
+from typing import Optional
+
 import torch
 import torch.nn as nn
-from typing import Optional
 
 
 class MLP(nn.Module):
@@ -51,7 +53,9 @@ class MLP(nn.Module):
         hidden_dim = hidden_dim or dim * 4
 
         if activation not in self.ACTIVATIONS:
-            raise ValueError(f"Unknown activation: {activation}. Choose from {list(self.ACTIVATIONS.keys())}")
+            raise ValueError(
+                f"Unknown activation: {activation}. Choose from {list(self.ACTIVATIONS.keys())}"
+            )
 
         self.fc1 = nn.Linear(dim, hidden_dim)
         self.act = self.ACTIVATIONS[activation]()

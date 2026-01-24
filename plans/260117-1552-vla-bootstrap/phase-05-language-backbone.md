@@ -8,9 +8,11 @@
 | Field | Value |
 |-------|-------|
 | Priority | P1 - Core Component |
-| Status | Pending |
+| Status | Completed ✓ |
 | Effort | 3h |
 | Dependencies | Phases 2, 3 |
+| Branch | feat/phase-05-language-backbone |
+| Commit | f703e9a |
 
 Implement language encoder wrapper for instruction encoding. GPT-2 provides lightweight baseline; architecture supports drop-in replacement with larger LMs.
 
@@ -357,14 +359,16 @@ class TestLanguageEncoder:
 ```
 
 ## Todo List
-- [ ] Implement GPT2Backbone with output modes
-- [ ] Implement LanguageEncoder generic wrapper
-- [ ] Handle tokenizer pad token edge cases
-- [ ] Register in LANGUAGE_REGISTRY
-- [ ] Update backbones __init__.py
-- [ ] Write unit tests
-- [ ] Test with real pretrained weights
-- [ ] Verify frozen parameters
+- [x] Implement GPT2Backbone with output modes
+- [x] Implement LanguageEncoder generic wrapper
+- [x] Handle tokenizer pad token edge cases
+- [x] Register in LANGUAGE_REGISTRY
+- [x] Update backbones __init__.py
+- [x] Write unit tests (23 tests, all passing)
+- [x] Test with real pretrained weights
+- [x] Verify frozen parameters
+
+**Implementation Complete:** All tasks finished, all tests pass, type checking clean.
 
 ## Success Criteria
 1. GPT2Backbone encodes text to embeddings

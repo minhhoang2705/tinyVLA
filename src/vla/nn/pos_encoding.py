@@ -8,10 +8,12 @@ Why these implementations:
 - Learnable: BERT-style, can adapt to data but fixed max length
 - RoPE: Used in modern LLMs (LLaMA, GPT-NeoX), rotates embeddings in head space
 """
-import torch
-import torch.nn as nn
+
 import math
 from typing import Tuple
+
+import torch
+import torch.nn as nn
 
 
 class SinusoidalPositionEncoding(nn.Module):
@@ -47,9 +49,7 @@ class SinusoidalPositionEncoding(nn.Module):
         position = torch.arange(0, max_len).unsqueeze(1).float()
 
         # Compute the division term: 10000^(2i/dim)
-        div_term = torch.exp(
-            torch.arange(0, dim, 2).float() * -(math.log(10000.0) / dim)
-        )
+        div_term = torch.exp(torch.arange(0, dim, 2).float() * -(math.log(10000.0) / dim))
 
         # Apply sin to even indices, cos to odd indices
         pe[:, 0::2] = torch.sin(position * div_term)
@@ -67,7 +67,7 @@ class SinusoidalPositionEncoding(nn.Module):
         Returns:
             Input with added positional encoding [batch, seq_len, dim]
         """
-        return x + self.pe[:, :x.size(1)]
+        return x + self.pe[:, : x.size(1)]
 
 
 class LearnablePositionEncoding(nn.Module):
@@ -108,9 +108,7 @@ class LearnablePositionEncoding(nn.Module):
         """
         seq_len = x.size(1)
         if seq_len > self.max_len:
-            raise ValueError(
-                f"Sequence length {seq_len} exceeds max_len {self.max_len}"
-            )
+            raise ValueError(f"Sequence length {seq_len} exceeds max_len {self.max_len}")
 
         # Create position indices [0, 1, 2, ..., seq_len-1]
         positions = torch.arange(seq_len, device=x.device)
@@ -212,7 +210,7 @@ class RotaryPositionEncoding(nn.Module):
 
         # Apply rotation matrix: [cos -sin; sin cos]
         # x_rot = [x1*cos - x2*sin, x1*sin + x2*cos]
-        return torch.cat([
-            x1 * cos[..., ::2] - x2 * sin[..., ::2],
-            x1 * sin[..., 1::2] + x2 * cos[..., 1::2]
-        ], dim=-1)
+        return torch.cat(
+            [x1 * cos[..., ::2] - x2 * sin[..., ::2], x1 * sin[..., 1::2] + x2 * cos[..., 1::2]],
+            dim=-1,
+        )

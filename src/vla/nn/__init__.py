@@ -14,15 +14,16 @@ Example:
     >>> mlp = MLP(dim=768)
     >>> norm = RMSNorm(768)
 """
-from .attention import MultiHeadAttention, CrossAttention
+
+from .attention import CrossAttention, MultiHeadAttention
 from .mlp import MLP, GatedMLP
 from .norm import RMSNorm, get_norm
 from .pos_encoding import (
-    SinusoidalPositionEncoding,
     LearnablePositionEncoding,
     RotaryPositionEncoding,
+    SinusoidalPositionEncoding,
 )
-from .temporal import FrameStacker, CausalConv1d, TemporalBlock
+from .temporal import CausalConv1d, FrameStacker, TemporalBlock
 
 __all__ = [
     # Attention

@@ -8,6 +8,7 @@ Why these implementations:
 - RMSNorm: Faster variant used in LLaMA (no mean computation)
 - Factory function: Easy switching via configuration
 """
+
 import torch
 import torch.nn as nn
 
@@ -83,6 +84,4 @@ def get_norm(norm_type: str, dim: int, eps: float = 1e-6) -> nn.Module:
     elif norm_type == "batch":
         return nn.BatchNorm1d(dim, eps=eps)
     else:
-        raise ValueError(
-            f"Unknown norm type: {norm_type}. Choose from: layer, rms, batch"
-        )
+        raise ValueError(f"Unknown norm type: {norm_type}. Choose from: layer, rms, batch")
