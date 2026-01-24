@@ -1,7 +1,7 @@
 ---
 title: "tinyVLA Bootstrap Implementation"
 description: "Modular VLA research framework with composable blocks, backbone builders, and Hydra configs"
-status: pending
+status: in-progress
 priority: P1
 effort: 40h
 branch: main
@@ -43,9 +43,9 @@ tests/          # Unit + integration tests
 
 | Phase | Description | Effort | Status |
 |-------|-------------|--------|--------|
-| [01](phase-01-project-setup.md) | Project setup (pyproject, structure) | 2h | Pending |
-| [02](phase-02-core-registries.md) | Registries + factory patterns | 2h | Pending |
-| [03](phase-03-nn-primitives.md) | NN primitives (attention, MLP, norm) | 4h | Pending |
+| [01](phase-01-project-setup.md) | Project setup (pyproject, structure) | 2h | Complete |
+| [02](phase-02-core-registries.md) | Registries + factory patterns | 2h | Complete |
+| [03](phase-03-nn-primitives.md) | NN primitives (attention, MLP, norm) | 4h | Complete |
 | [04](phase-04-vision-backbone.md) | Vision backbone builder (timm) | 3h | Pending |
 | [05](phase-05-language-backbone.md) | Language backbone (GPT-2) | 3h | Pending |
 | [06](phase-06-fusion.md) | Fusion mechanisms (Perceiver) | 4h | Pending |

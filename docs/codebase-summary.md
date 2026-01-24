@@ -2,13 +2,13 @@
 
 ## Overview
 
-tinyVLA is in **Phase 2 complete** (0.1.0) with 621 lines of implemented code across 14 Python modules. The registry pattern is fully operational with factory functions enabling dynamic component loading. Remaining modules await implementation.
+tinyVLA is in **Phase 3 complete** (0.1.0) with 1453 lines of implemented code across 20 Python modules. The registry pattern is fully operational, and neural network primitives provide foundational building blocks for transformer-based VLA architectures.
 
 **Current State:**
 - Architecture: Complete blueprint
 - Infrastructure: Fully configured (Hydra, PyTorch Lightning, testing framework)
-- Implementation: Registry pattern complete (Phase 2)
-- Ready for: Parallel component development (Phases 3-7)
+- Implementation: Registry pattern + NN primitives complete (Phases 2-3)
+- Ready for: Backbone development and fusion mechanisms (Phases 4-5)
 
 ## Directory Structure
 
@@ -19,7 +19,13 @@ src/vla/
 │   ├── base.py                # Registry class & global instances (157 LOC)
 │   ├── factories.py           # Factory functions for component building (138 LOC)
 │   └── __init__.py            # Public API exports (54 LOC)
-├── nn/                         # Neural network primitives (EMPTY)
+├── nn/                         # Neural network primitives (IMPLEMENTED - Phase 3)
+│   ├── attention.py           # MultiHeadAttention, CrossAttention (194 LOC)
+│   ├── mlp.py                 # MLP, GatedMLP (124 LOC)
+│   ├── norm.py                # RMSNorm, get_norm factory (88 LOC)
+│   ├── pos_encoding.py        # Sinusoidal, Learnable, RoPE (218 LOC)
+│   ├── temporal.py            # FrameStacker, CausalConv1d, TemporalBlock (163 LOC)
+│   └── __init__.py            # Public API exports (45 LOC)
 ├── backbones/                  # Vision/language encoders (EMPTY)
 ├── fusion/                     # Multimodal fusion mechanisms (EMPTY)
 ├── policy/                     # Action prediction heads (EMPTY)
@@ -116,16 +122,95 @@ encoder = VISION_REGISTRY.get("dinov2_base", hidden_dim=768)
 available = VISION_REGISTRY.list_available()  # ['dinov2_base', ...]
 ```
 
-### Neural Network Primitives: `vla/nn/__init__.py`
-**Purpose:** Reusable neural network building blocks
-**Status:** Empty stub
-**Planned Components:**
-- MultiHeadAttention (with Flash Attention 2 support)
-- MLP (with configurable activation)
-- Normalization (RMSNorm, LayerNorm)
-- RoPE (Rotary Position Embeddings)
-- FrameStacker (temporal frame aggregation)
-- CausalConv1d (for temporal sequences)
+### Neural Network Primitives: `vla/nn/`
+**Purpose:** Reusable neural network building blocks for transformer-based VLA architectures
+**Status:** IMPLEMENTED (Phase 3 Complete)
+**LOC:** 832 total (attention 194, mlp 124, norm 88, pos_encoding 218, temporal 163, __init__ 45)
+**Coverage:** 99.5% (70 unit tests)
+
+**Implemented Components:**
+
+#### Attention (`attention.py` - 194 LOC)
+- **MultiHeadAttention:** Self-attention with optional Flash Attention 2 support
+  - Args: `dim`, `num_heads`, `dropout`, `use_flash`, `bias`
+  - Returns: `[B, seq_len, dim]` tensor
+  - Features: Scaled dot-product attention, O(n²) complexity, 2-4x faster with Flash
+- **CrossAttention:** Attends from query to key/value (different sequences)
+  - Args: `query_dim`, `context_dim`, `num_heads`, `dropout`, `use_flash`
+  - Usage: Language queries attend to vision features, or vice versa
+  - Fused features generation in Perceiver resampler
+
+#### MLP (`mlp.py` - 124 LOC)
+- **MLP:** Standard feed-forward network with configurable activation
+  - Args: `dim`, `hidden_dim` (expansion factor), `dropout`, `activation`
+  - Supports: ReLU, GELU, SiLU, Mish, GLU variants
+  - Pattern: Linear → Activation → Dropout → Linear
+- **GatedMLP:** Gated feed-forward network (Gating Mechanism)
+  - Args: `dim`, `hidden_dim`, `dropout`
+  - Pattern: Linear(3x) → Split(value, gate) → value * sigmoid(gate)
+  - Alternative to attention for reduced complexity
+
+#### Normalization (`norm.py` - 88 LOC)
+- **RMSNorm:** Root Mean Square Layer Normalization (from T5, more stable)
+  - Args: `dim`, `eps` (default 1e-6)
+  - Computes: `x * (dim / RMS(x))` instead of `(x - mean) / sqrt(var)`
+  - Benefits: Faster, no bias needed, better for large models
+- **get_norm():** Factory function to select norm layer
+  - Supports: "layer_norm", "rms_norm", "batch_norm"
+  - Enables config-driven architecture selection
+
+#### Position Encoding (`pos_encoding.py` - 218 LOC)
+- **SinusoidalPositionEncoding:** Fixed sinusoidal encodings (original Transformer)
+  - Args: `dim`, `max_seq_len`
+  - Pattern: PE(pos, 2i) = sin(pos/10000^(2i/dim))
+  - No learnable parameters; deterministic and extrapolates well
+- **LearnablePositionEncoding:** Learnable embeddings per position
+  - Args: `dim`, `max_seq_len`
+  - Trained during model training, better if data distribution is known
+  - Trade-off: Smaller extrapolation range
+- **RotaryPositionEncoding (RoPE):** Rotary embeddings (modern alternative)
+  - Args: `dim`, `base` (default 10000)
+  - Pattern: Rotates Q,K vectors in 2D subspaces by angle θ = m*θ₀
+  - Benefits: Length extrapolation, better long-context performance
+  - Used in: LLaMA, GPT-3.5+, modern VLA models
+
+#### Temporal Modeling (`temporal.py` - 163 LOC)
+- **FrameStacker:** Stack temporal frames for multi-frame visual input
+  - Args: `num_frames`, `stack_mode` (concat/mean/attention)
+  - Input: Multiple images [B, num_frames, 3, H, W]
+  - Output: [B, 3*num_frames, H, W] (concat) or [B, 3, H, W] (aggregated)
+  - Use case: Optical flow, motion information
+- **CausalConv1d:** 1D convolution with causal padding (no future leakage)
+  - Args: `in_channels`, `out_channels`, `kernel_size`, `dilation`
+  - Padding: `(kernel_size - 1) * dilation` on left, 0 on right
+  - For: Temporal sequence processing without looking ahead
+- **TemporalBlock:** Residual block with causal conv + normalization + activation
+  - Args: `channels`, `kernel_size`, `dilation`, `dropout`
+  - Pattern: Conv → Norm → ReLU → Dropout → Residual connection
+  - Stacked for multi-layer temporal modeling
+
+**Public API (vla.nn exports):**
+```python
+from vla.nn import (
+    # Attention
+    MultiHeadAttention,
+    CrossAttention,
+    # MLP
+    MLP,
+    GatedMLP,
+    # Normalization
+    RMSNorm,
+    get_norm,
+    # Position encoding
+    SinusoidalPositionEncoding,
+    LearnablePositionEncoding,
+    RotaryPositionEncoding,
+    # Temporal
+    FrameStacker,
+    CausalConv1d,
+    TemporalBlock,
+)
+```
 
 ### Backbones Module: `vla/backbones/__init__.py`
 **Purpose:** Vision and language encoder implementations
@@ -372,21 +457,20 @@ ipython >= 8.20.0           # Interactive shell
 
 ## Implementation Status Summary
 
-| Component | Status | Purpose | LOC |
-|-----------|--------|---------|-----|
-| vla | Active | Package init | 6 |
-| utils.logging | IMPLEMENTED | Logger setup | 48 |
-| registry | IMPLEMENTED | Component registry | 349 |
-| nn | Empty | NN primitives | 0 |
-| backbones | Empty | Vision/language | 0 |
-| fusion | Empty | Fusion mechanisms | 0 |
-| policy | Empty | Action heads | 0 |
-| models | Empty | VLA orchestration | 0 |
-| data | Empty | Data loaders | 0 |
-| training | Empty | Lightning modules | 0 |
-| tests.unit.test_registry | IMPLEMENTED | Registry unit tests | 272 |
+| Component | Status | Purpose | LOC | Tests |
+|-----------|--------|---------|-----|-------|
+| vla | Active | Package init | 6 | - |
+| utils.logging | IMPLEMENTED | Logger setup | 48 | - |
+| registry | IMPLEMENTED | Component registry | 349 | 20 tests |
+| nn | IMPLEMENTED | NN primitives | 832 | 70 tests |
+| backbones | Empty | Vision/language | 0 | - |
+| fusion | Empty | Fusion mechanisms | 0 | - |
+| policy | Empty | Action heads | 0 | - |
+| models | Empty | VLA orchestration | 0 | - |
+| data | Empty | Data loaders | 0 | - |
+| training | Empty | Lightning modules | 0 | - |
 
-**Total:** 621 LOC implemented (54 LOC added in tests), 8 modules awaiting implementation, Phase 2 COMPLETE
+**Total:** 1,453 LOC implemented across 6 modules, 90 unit tests (99.5% coverage), 4 modules awaiting implementation, Phase 3 COMPLETE
 
 ## Entry Points
 
@@ -410,11 +494,12 @@ python scripts/eval.py --checkpoint checkpoints/model.pt --data test_data.hdf5
 
 1. **Phase 1 (Setup):** Complete (project scaffolding done)
 2. **Phase 2 (Registries):** Complete (registry pattern + factories + 20 unit tests passing)
-3. **Phases 3-7 (Components):** Ready to start in parallel (NN primitives, backbones, fusion, policy)
-4. **Phase 8 (Model):** Orchestrate components into VLA model
-5. **Phases 9-11 (Config/Data/Training):** Hydra configs, data pipeline, Lightning training
-6. **Phase 12 (Testing):** Comprehensive test suite with 80%+ coverage
+3. **Phase 3 (NN Primitives):** Complete (832 LOC, 70 unit tests, 99.5% coverage)
+4. **Phases 4-7 (Backbones/Fusion/Policy):** Ready to start in parallel
+5. **Phase 8 (Model):** Orchestrate components into VLA model
+6. **Phases 9-11 (Config/Data/Training):** Hydra configs, data pipeline, Lightning training
+7. **Phase 12 (Integration Tests):** End-to-end training pipeline
 
 See [Project Roadmap](./project-roadmap.md) for detailed timeline and phases.
 
-**Phase 2 Completion Date:** 2026-01-22 (2.5h actual vs 2h estimated)
+**Phase 3 Completion Date:** 2026-01-23 (approx 3h actual vs 3h estimated)
