@@ -433,21 +433,29 @@ action = build_action_head(cfg.action)
 model = build_model(cfg.model)
 ```
 
-### 3.2 Vision Backbone
+### 3.2 Vision Backbone (IMPLEMENTED - Phase 4)
 
 **Supported Models:**
-- **DINOv2 (Primary):** Self-supervised ViT, 1.1B params total (224² spatial)
+- **DINOv2 (Primary):** Self-supervised ViT, Meta
   - Size: Base (86M params), Large (300M params)
   - Frozen during training for transfer learning
   - Extracted to intermediate layer if needed
+  - Output: [B, 196, 768] for ViT-B/14
 
-- **SigLIP (Alternative):** Vision-language aligned, 400M params
+- **SigLIP (Alternative):** Vision-language aligned, OpenAI
   - Size: Small, Base, Large
   - Multimodal pretraining on web data
   - Better instruction following than pure vision models
+  - Output: [B, num_patches, feature_dim]
+
+- **ViT (Generic):** HuggingFace timm wrapper
+  - Flexible model names via timm library
+  - Supports any timm vision model
 
 **Interface:**
 ```python
+from vla.backbones import DINOv2Backbone
+
 class VisionBackbone(nn.Module):
     """Base interface for vision encoders."""
 
@@ -462,20 +470,33 @@ class VisionBackbone(nn.Module):
         """
 
 # Instantiation (frozen):
-encoder = DINOv2(size="base", pretrained=True, freeze=True)
-features = encoder(images)  # No gradients computed
+encoder = DINOv2Backbone(size="base", pretrained=True, freeze=True)
+features = encoder(images)  # [B, 196, 768], no gradients
 ```
 
-### 3.3 Language Backbone
+**Implementation Details:**
+- All models loaded via timm or transformers
+- Freeze flag disables gradient computation
+- Type-safe with full docstrings
+- Registered via VISION_REGISTRY for dynamic loading
+
+### 3.3 Language Backbone (IMPLEMENTED - Phase 5)
 
 **Supported Models:**
-- **GPT-2:** Baseline language model (124M-355M params)
+- **GPT-2:** Baseline language model
   - Small (124M): Faster, less memory
   - Base (355M): Recommended balance
   - Pretrained on English text, good for instruction following
 
+- **LLaMA:** Modern language model (ALTERNATIVE)
+  - 7B-70B params (various sizes)
+  - Better long-context modeling
+  - Improved instruction following
+
 **Interface:**
 ```python
+from vla.backbones import GPT2Backbone
+
 class LanguageBackbone(nn.Module):
     """Language encoder with tokenization."""
 
@@ -488,14 +509,20 @@ class LanguageBackbone(nn.Module):
             features: [B, max_seq_len, feature_dim]
                      e.g., [B, 64, 768] for GPT-2-base
         """
-        # Internally:
-        # 1. Tokenize texts with GPT-2 tokenizer
-        # 2. Pad to max length
-        # 3. Pass through GPT-2 transformer layers
-        # 4. Return last hidden state
+
+# Instantiation (frozen):
+encoder = GPT2Backbone(model_name="gpt2", freeze=True)
+features = encoder(texts)  # [B, seq_len, 768], no gradients
 ```
 
-### 3.4 Fusion Mechanism
+**Implementation Details:**
+- Integrated tokenization (handles padding, truncation)
+- Automatic sequence length handling
+- Freeze flag disables gradient computation
+- Registered via LANGUAGE_REGISTRY
+- Handles variable-length instruction sequences
+
+### 3.4 Fusion Mechanism (IMPLEMENTED - Phase 6)
 
 **Primary: Perceiver Resampler**
 
@@ -503,46 +530,59 @@ class LanguageBackbone(nn.Module):
 Vision Features [B, N_v=196, D_v=768]
 Language Features [B, N_l=64, D_l=768]
           │
-          ├─ Project to common dimension (if needed)
+          ├─ Create learnable latent tokens [K=64, D=768]
+          │   • Initialize as learnable parameters
+          │   • Repeated for each batch item
           │
-          ├─ Create learnable latent queries [K=64, D=768]
+          ├─ Perceiver Stack (4-8 layers, default 4):
+          │   Each layer:
+          │   ├─ Cross-attention: Latents (Q) attend to Vision+Language (K,V)
+          │   ├─ Self-attention: Latents (Q,K,V) self-attention
+          │   ├─ MLP: Feed-forward layer with residual
+          │   └─ Layer norm: RMSNorm for stability
           │
-          ├─ Cross-attention layer:
-          │   Query: Latent queries [K, D]
-          │   Key/Value: Vision + Language concatenated [N_v+N_l, D]
-          │   Output: Updated latents [K, D]
-          │
-          ├─ Transformer blocks (typically 4-8 layers)
-          │   • Multi-head self-attention on latents
-          │   • Cross-attention back to vision+language
-          │   • MLP blocks
+          ├─ Multiple iterations of cross+self attention
+          │   • Each layer refines latent understanding
+          │   • Total compute: O(K * L) where L = num_layers
           │
           └─ Fused Features [B, K=64, D=768]
 
-Advantage:
-- Fixed-size bottleneck (K latent tokens) regardless of input length
-- Efficient: Compute grows as O(K) not O(N²)
-- Proven in Flamingo, RT-2, OpenVLA
+Advantages:
+- Fixed-size bottleneck (K=64 tokens) regardless of input length
+- Efficient: Compute O(K) not O(N²)
+- Proven in Flamingo (80B params), RT-2, OpenVLA
+- Flexible: K adjustable for speed/capacity tradeoff
 
-Alternative: CrossAttentionFusion
+Alternative 1: CrossAttentionFusion
 - Direct cross-attention between vision and language
-- Lower computational cost but higher memory
-- Used in early VLA models
+- Output: [B, N_v, D] (keeps all vision patches)
+- Lower compression but more information preserved
+- Used in earlier VLA models
 
-Alternative: ConcatFusion
+Alternative 2: ConcatFusion
 - Simple concatenation of vision+language features
+- Output: [B, N_v + N_l, D]
 - Baseline for ablation studies
+- Requires downstream head to handle variable length
+
+Alternative 3: AdapterFusion
+- Low-rank adapter networks (~1% params)
+- Output: [B, K, D]
+- Parameter-efficient for resource constraints
 ```
 
-### 3.5 Action Heads
+### 3.5 Action Heads (IMPLEMENTED - Phase 7)
 
-**Discrete Action Head (Primary)**
+**Discrete Action Head (Primary - RT-2 style)**
 
 ```
 Fused Features [B, K=64, D=768]
           │
-          ├─ Global average pooling
+          ├─ Global average pooling (or max pooling)
           │  → [B, D=768]
+          │
+          ├─ Optional: Projection layer (if D ≠ feature_dim)
+          │  → [B, feature_dim]
           │
           ├─ Linear layer to action logits
           │  → [B, 7*256] (for 7-DOF, 256 bins per DOF)
@@ -560,7 +600,13 @@ Fused Features [B, K=64, D=768]
 Loss: CrossEntropyLoss
     • Input: Logits [B, 7, 256], Targets [B, 7] (bin indices)
     • Efficient classification loss
-    • Stable training
+    • Stable training (no gradient explosion)
+    • Used in: RT-2, Open Vocabulary robotics models
+
+Advantages:
+- Stable gradient flow (classification vs regression)
+- Explicit bin representation enables semantic understanding
+- Easy to add constraints (e.g., max/min velocities per bin)
 ```
 
 **Continuous Action Head (Alternative)**
@@ -571,9 +617,9 @@ Fused Features [B, K=64, D=768]
           ├─ Global average pooling
           │  → [B, D=768]
           │
-          ├─ Linear layers
+          ├─ Two linear heads
           │  ├─ Mean head → [B, 7]
-          │  └─ LogVar head → [B, 7]
+          │  └─ LogVar head → [B, 7] (log variance)
           │
           └─ Gaussian distribution: N(mean, exp(logvar))
 
@@ -581,6 +627,33 @@ Loss: GaussianNLLLoss
     • Likelihood: -log(N(y|mean, var))
     • Captures both prediction and uncertainty
     • Slower convergence than discrete
+    • Better for continuous dynamics
+
+Advantages:
+- Direct continuous predictions
+- Uncertainty quantification (log variance)
+- Better for smooth action trajectories
+```
+
+**Hybrid Action Head (Mixed)**
+
+```
+Fused Features [B, K=64, D=768]
+          │
+          ├─ Split into arm + gripper
+          │
+          ├─ Arm (6 DOF): Discrete head
+          │   └─ Output: [B, 6, 256]
+          │
+          ├─ Gripper (1 DOF): Continuous head
+          │   └─ Output: [B, 1, 2] (mean, logvar)
+          │
+          └─ Combined loss: 0.6*L_discrete + 0.4*L_continuous
+
+Usage:
+- Real robots often need discrete arm + continuous gripper
+- Gripper force/position benefits from uncertainty
+- Arm joints typically benefit from discrete control
 ```
 
 ## 4. Configuration System (Hydra)
@@ -930,6 +1003,6 @@ Reproducibility:
 
 ---
 
-**Document Version:** 1.1
-**Last Updated:** 2026-01-23
-**Status:** Active (nn primitives module complete, Phase 3)
+**Document Version:** 1.2
+**Last Updated:** 2026-01-25
+**Status:** Active (Phases 2-7 complete, backbones/fusion/heads implemented)
