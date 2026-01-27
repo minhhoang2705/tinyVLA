@@ -4,6 +4,10 @@
 import pytest
 import torch
 
+# Import component modules to trigger @REGISTRY.register() decorators
+# This populates VISION_REGISTRY, LANGUAGE_REGISTRY, FUSION_REGISTRY, ACTION_REGISTRY
+from vla import backbones, fusion, models, policy  # noqa: F401
+
 
 @pytest.fixture
 def device():

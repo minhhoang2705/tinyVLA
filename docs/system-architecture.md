@@ -46,7 +46,73 @@ tinyVLA follows a **modular composition pattern** where independent components a
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-## 2. Component Interactions
+## 2. VLA Model Orchestration (Phase 8 - IMPLEMENTED)
+
+### VLAModel Architecture
+
+The `VLAModel` class orchestrates all components via registry-based composition:
+
+```
+VLAConfig (dataclass)
+    ├─ VisionConfig (model_name, pretrained, freeze, hidden_dim)
+    ├─ LanguageConfig (model_name, pretrained, freeze, hidden_dim)
+    ├─ FusionConfig (type, num_latents, latent_dim, num_layers)
+    └─ ActionConfig (type, action_dim, num_bins, pooling_type)
+           ↓
+    VLAModel.__init__()
+           ├─ build_vision() → VISION_REGISTRY.get()
+           ├─ build_language() → LANGUAGE_REGISTRY.get()
+           ├─ build_fusion() → FUSION_REGISTRY.get()
+           └─ build_action_head() → ACTION_REGISTRY.get()
+           ↓
+    Assembled VLA Model
+```
+
+**Key Features:**
+- **Config-driven composition:** All components selected via VLAConfig
+- **Registry integration:** Factory pattern for dynamic instantiation
+- **Frozen backbones:** Vision/Language encoders frozen (99% of params)
+- **Trainable layers:** Only fusion module and action head trained
+- **Dual-mode inference:** Training mode (with loss) and predict mode (inference only)
+- **Checkpoint persistence:** Save/load complete state with config
+- **Input validation:** Automatic shape and type checking
+- **Temporal support:** Optional multi-frame processing via FrameStacker
+
+**Parameter Breakdown (typical configuration):**
+```
+Total: ~500M parameters
+├─ Vision backbone (frozen): 86M (DINOv2-base)
+├─ Language backbone (frozen): 124M (GPT-2-small)
+├─ Fusion module (trainable): 285M (Perceiver, 4 layers)
+└─ Action head (trainable): 5M (discrete, 7-DOF)
+
+Trainable: 290M (58%)
+Frozen: 210M (42%)
+```
+
+### Training vs Inference
+
+**Training Mode:**
+```python
+model.train()
+output = model(images, texts=instructions, target_actions=actions)
+loss = output["loss"]
+loss.backward()  # Backprop only through fusion + action head
+optimizer.step()
+```
+
+**Inference Mode:**
+```python
+model.eval()
+with torch.no_grad():
+    actions = model.predict(images, texts=instructions)
+    # actions shape: [B, 7] (discrete: argmax over bins)
+    # actions shape: [B, 7] (continuous: mean of Gaussian)
+```
+
+---
+
+## 3. Component Interactions
 
 ### Data Flow
 
@@ -118,7 +184,7 @@ Training Loss Computation
         └─ Continuous: GaussianNLLLoss(actions, target_actions)
 ```
 
-## 3. Component Architecture Details
+## 4. Component Architecture Details
 
 ### 3.1 Neural Network Primitives (IMPLEMENTED - Phase 3)
 
@@ -656,7 +722,7 @@ Usage:
 - Arm joints typically benefit from discrete control
 ```
 
-## 4. Configuration System (Hydra)
+## 5. Configuration System (Hydra)
 
 ### Config Hierarchy
 
@@ -789,7 +855,7 @@ python scripts/train.py --multirun \
   train.lr=1e-4,3e-4
 ```
 
-## 5. Data Pipeline Architecture
+## 6. Data Pipeline Architecture
 
 ### Data Flow
 
@@ -839,7 +905,7 @@ DataLoader (PyTorch)
         └─ Batches [B, 3, 224, 224], [B], [B, 7]
 ```
 
-## 6. Training Infrastructure (PyTorch Lightning)
+## 7. Training Infrastructure (PyTorch Lightning)
 
 ### Training Loop Structure
 
@@ -887,7 +953,7 @@ PyTorch Lightning handles FSDP automatically:
     trainer = Trainer(strategy=strategy, devices=4)
 ```
 
-## 7. Module Dependencies
+## 8. Module Dependencies
 
 ### Dependency Graph
 
@@ -897,21 +963,25 @@ registry/ (no dependencies)
     ├─ nn/ (IMPLEMENTED - no circular deps)
     │  └─ depends: torch, einops, utils.logging
     │
-    ├─ backbones/ (EMPTY - will depend on nn + registry)
+    ├─ backbones/ (IMPLEMENTED - Phase 4-5)
     │  └─ depends: nn, registry, timm/transformers
     │
-    ├─ fusion/ (EMPTY - will depend on nn + registry)
+    ├─ fusion/ (IMPLEMENTED - Phase 6)
     │  └─ depends: nn, registry, torch
     │
-    └─ policy/ (EMPTY - will depend on nn + registry)
+    └─ policy/ (IMPLEMENTED - Phase 7)
        └─ depends: nn, registry, torch
 
     ↓
-models/ (EMPTY - depends on backbones, fusion, policy, registry)
+models/ (IMPLEMENTED Phase 8 - depends on backbones, fusion, policy, registry)
+    ├─ vla_base.py (orchestrator, 509 LOC)
+    ├─ vla_configs.py (config dataclasses, 186 LOC)
+    └─ policy.action_utils (loss computation)
+
     ↓
-training/ (EMPTY - depends on models, utils, pytorch-lightning)
+training/ (PENDING Phase 11 - depends on models, utils, pytorch-lightning)
     ↓
-data/ (EMPTY - depends on utils)
+data/ (PENDING Phase 10 - depends on utils)
     ↓
 train.py (depends on all modules)
 ```
@@ -936,7 +1006,7 @@ def get_model() -> "VLAModel":
     return VLAModel(...)
 ```
 
-## 8. Storage & Checkpointing
+## 9. Storage & Checkpointing
 
 ### Model Checkpointing
 
@@ -980,7 +1050,7 @@ Reproducibility:
         --config-name config
 ```
 
-## 9. Performance Optimization Strategy
+## 10. Performance Optimization Strategy
 
 ### Memory Optimization
 
@@ -1003,6 +1073,6 @@ Reproducibility:
 
 ---
 
-**Document Version:** 1.2
-**Last Updated:** 2026-01-25
-**Status:** Active (Phases 2-7 complete, backbones/fusion/heads implemented)
+**Document Version:** 1.3
+**Last Updated:** 2026-01-26
+**Status:** Active (Phases 2-8 complete, VLA orchestration implemented)

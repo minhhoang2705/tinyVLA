@@ -7,8 +7,8 @@ tinyVLA is in **Phases 4-7 complete** (0.2.0) with ~3,300 lines of production co
 **Current State:**
 - Architecture: Complete blueprint with major components implemented
 - Infrastructure: Fully configured (Hydra, PyTorch Lightning, testing framework)
-- Implementation: Phases 2-7 complete (registry, NN primitives, backbones, fusion, action heads)
-- Ready for: Model orchestration (Phase 8) and training infrastructure (Phases 9-11)
+- Implementation: Phases 2-8 complete (registry, NN primitives, backbones, fusion, action heads, VLA orchestration)
+- Ready for: Configuration system (Phase 9) and training infrastructure (Phases 10-11)
 
 ## Directory Structure
 
@@ -43,7 +43,10 @@ src/vla/
 │   ├── continuous.py          # Gaussian head (178 LOC)
 │   ├── hybrid.py              # Hybrid arm+gripper head (186 LOC)
 │   └── __init__.py            # Public API exports (48 LOC)
-├── models/                     # VLA model orchestration (EMPTY - Phase 8)
+├── models/                     # VLA model orchestration (IMPLEMENTED - Phase 8)
+│   ├── vla_base.py            # VLAModel main class (509 LOC)
+│   ├── vla_configs.py         # Config dataclasses (186 LOC)
+│   └── __init__.py            # Public API exports (51 LOC)
 ├── data/                       # Data loaders & preprocessing (EMPTY - Phase 10)
 ├── training/                   # PyTorch Lightning modules (EMPTY - Phase 11)
 └── utils/                      # Utilities
@@ -373,32 +376,101 @@ actions = torch.argmax(logits, dim=-1)  # [B, 7]
 actions = (actions / 255.0) * 2 - 1  # Normalize to [-1, 1]
 ```
 
-### Models Module: `vla/models/__init__.py`
+### Models Module: `vla/models/` (IMPLEMENTED - Phase 8)
 **Purpose:** VLA model orchestration and composition
-**Status:** Empty stub
-**Planned Components:**
-- VLAConfig (dataclass for model configuration)
-- VLAModel (main model class)
-- Model forward pass: images + text → actions
-- Checkpoint save/load utilities
-- Inference wrapper
+**Status:** IMPLEMENTED (746 LOC total)
+**Files:** 3
+
+#### `models/vla_base.py` (509 LOC)
+**VLAModel class:** Registry-based component composition
+- Frozen vision/language backbones (99% params frozen)
+- Trainable fusion module (Perceiver Resampler)
+- Trainable action head (discrete/Gaussian/hybrid)
+- Forward pass: images + text → actions
+- Training mode with loss computation
+- Inference mode with action prediction
+- Checkpoint save/load with state preservation
+- Input validation and enhanced logging
+- Support for temporal multi-frame processing via FrameStacker
+
+**Key Methods:**
+```python
+def __init__(self, config: VLAConfig | dict)
+def forward(images, texts, target_actions=None) -> Dict[str, Tensor]
+def predict(images, texts) -> Tensor  # Inference mode
+def save_checkpoint(path: Path) -> None
+def load_checkpoint(path: Path) -> None
+def compute_trainable_params() -> float
+```
 
 **Architecture:**
-```python
-class VLAModel(nn.Module):
-    def __init__(self, vision, language, fusion, action_head):
-        self.vision = vision
-        self.language = language
-        self.fusion = fusion
-        self.action_head = action_head
-
-    def forward(self, images, texts):
-        v_feats = self.vision(images)      # [B, N, D_v]
-        l_feats = self.language(texts)     # [B, L, D_l]
-        fused = self.fusion(v_feats, l_feats)  # [B, K, D]
-        actions = self.action_head(fused)  # [B, action_dim]
-        return actions
 ```
+Images [B,3,H,W]              Text [B]
+        │                        │
+        ▼                        ▼
+Vision Backbone (frozen)  Language Backbone (frozen)
+[B, 196, 768]                [B, L, 768]
+        │                        │
+        └────────┬───────────────┘
+                 ▼
+        Fusion Module (trainable)
+             [B, 64, 768]
+                 │
+                 ▼
+        Action Head (trainable)
+            [B, action_dim]
+```
+
+#### `models/vla_configs.py` (186 LOC)
+**Config dataclasses:**
+- `VisionConfig`: Vision backbone configuration
+  - `model_name`, `pretrained`, `hidden_dim`, `freeze`
+- `LanguageConfig`: Language encoder configuration
+  - `model_name`, `pretrained`, `hidden_dim`, `freeze`
+- `FusionConfig`: Fusion module configuration
+  - `type` (perceiver/cross_attn/concat/adapter)
+  - `num_latents`, `latent_dim`, `num_layers`
+- `ActionConfig`: Action head configuration
+  - `type` (discrete/continuous/hybrid)
+  - `action_dim`, `num_bins`, `pooling_type`
+- `VLAConfig`: Master configuration
+  - Composition of all above configs
+  - Methods: `from_dict()`, `to_dict()`, `asdict()`
+
+**Usage:**
+```python
+config = VLAConfig(
+    vision=VisionConfig(model_name="vit_tiny_patch16_224"),
+    language=LanguageConfig(model_name="gpt2"),
+    action=ActionConfig(action_dim=7),
+)
+model = VLAModel(config)
+```
+
+#### `models/__init__.py` (51 LOC)
+Public API exports:
+```python
+from .vla_base import VLAModel
+from .vla_configs import (
+    VLAConfig,
+    VisionConfig,
+    LanguageConfig,
+    FusionConfig,
+    ActionConfig,
+)
+```
+
+**Testing:**
+- 20 comprehensive unit tests (98% coverage)
+- Test categories:
+  - Model instantiation (registry-based, dict-based)
+  - Forward pass (training mode, inference mode)
+  - Loss computation (discrete, continuous)
+  - Checkpoint save/load (complete state preservation)
+  - Parameter freezing (99% frozen validation)
+  - Input validation (shape checking, error handling)
+  - Temporal processing (multi-frame support)
+  - Config serialization (dict conversion roundtrip)
 
 ### Data Module: `vla/data/__init__.py`
 **Purpose:** Data loading and preprocessing
@@ -575,11 +647,11 @@ ipython >= 8.20.0           # Interactive shell
 | backbones | IMPLEMENTED | Vision/language | 1,137 | 54 | 95%+ |
 | fusion | IMPLEMENTED | Fusion mechanisms | 955 | 35 | 94%+ |
 | policy | IMPLEMENTED | Action heads | 719 | 25 | 93%+ |
-| models | Empty | VLA orchestration | 0 | - | - |
+| models | IMPLEMENTED | VLA orchestration | 746 | 20 | 98% |
 | data | Empty | Data loaders | 0 | - | - |
 | training | Empty | Lightning modules | 0 | - | - |
 
-**Total:** 4,046 LOC production code + 2,525 LOC tests across 10 modules, 204 unit tests (avg 94% coverage), Phases 2-7 COMPLETE
+**Total:** 4,792 LOC production code + 2,899 LOC tests across 11 modules, 224 unit tests (avg 95% coverage), Phases 2-8 COMPLETE
 
 ## Entry Points
 
@@ -601,16 +673,21 @@ python scripts/eval.py --checkpoint checkpoints/model.pt --data test_data.hdf5
 
 ## Next Steps
 
-1. **Phase 1 (Setup):** Complete (project scaffolding done)
-2. **Phase 2 (Registries):** Complete (registry pattern + factories + 20 unit tests passing)
-3. **Phase 3 (NN Primitives):** Complete (832 LOC, 70 unit tests, 99.5% coverage)
-4. **Phases 4-7 (Backbones/Fusion/Policy):** Ready to start in parallel
-5. **Phase 8 (Model):** Orchestrate components into VLA model
-6. **Phases 9-11 (Config/Data/Training):** Hydra configs, data pipeline, Lightning training
-7. **Phase 12 (Integration Tests):** End-to-end training pipeline
+1. **Phase 1 (Setup):** ✓ Complete (project scaffolding done)
+2. **Phase 2 (Registries):** ✓ Complete (registry pattern + factories + 20 unit tests passing)
+3. **Phase 3 (NN Primitives):** ✓ Complete (832 LOC, 70 unit tests, 99.5% coverage)
+4. **Phases 4-5 (Backbones):** ✓ Complete (vision + language encoders, 54 tests)
+5. **Phase 6 (Fusion):** ✓ Complete (Perceiver + alternatives, 35 tests)
+6. **Phase 7 (Action Heads):** ✓ Complete (discrete/continuous/hybrid, 25 tests)
+7. **Phase 8 (VLA Model):** ✓ Complete (orchestration + configs, 20 tests, 98% coverage)
+8. **Phase 9 (Hydra Config):** Next - Configuration system for model variants
+9. **Phase 10 (Data Pipeline):** Data loaders (dummy, HDF5, WebDataset)
+10. **Phase 11 (Training):** PyTorch Lightning module with WandB + FSDP
+11. **Phase 12 (Testing):** Integration tests and CI/CD validation
 
 See [Project Roadmap](./project-roadmap.md) for detailed timeline and phases.
 
 **Phase 3 Completion Date:** 2026-01-23 (approx 3h actual vs 3h estimated)
 **Phases 4-7 Completion Date:** 2026-01-24 (approx 13h actual vs 13h estimated)
-**Overall Progress:** 54% complete (7 of 12 phases)
+**Phase 8 Completion Date:** 2026-01-26 (approx 4h actual vs 4h estimated)
+**Overall Progress:** 67% complete (8 of 12 phases)

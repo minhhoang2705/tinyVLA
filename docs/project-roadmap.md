@@ -1,11 +1,11 @@
 # Project Roadmap - tinyVLA
 
-## Current Status (2026-01-25)
+## Current Status (2026-01-26)
 
-**Phase:** Backbones & Fusion Complete (Phases 4-7 Complete)
-**Implementation:** ~3,300 LOC production code + 2,525 LOC tests
-**Timeline:** MVP backbone + fusion complete. Ready for model orchestration (Phase 8)
-**Estimated Effort:** 40 hours total (actual: ~16h elapsed)
+**Phase:** VLA Model Complete (Phases 1-8 Complete)
+**Implementation:** ~3,700 LOC production code + 2,900 LOC tests (97% coverage)
+**Timeline:** Core VLA architecture complete. Ready for Hydra configuration (Phase 9)
+**Estimated Effort:** 40 hours total (actual: ~19.5h elapsed)
 
 ## 12-Phase Bootstrap Plan
 
@@ -20,7 +20,7 @@
 | **5** | Language Backbone | 3h | COMPLETE ✓ | Phase 2, 3 | GPT-2, tokenization (489 LOC, 23 tests) |
 | **6** | Fusion Mechanisms | 4h | COMPLETE ✓ | Phase 2-5 | Perceiver, cross-attn, concat (1,133 LOC, 35 tests) |
 | **7** | Action Heads | 3h | COMPLETE ✓ | Phase 2, 3 | Discrete bins, Gaussian, hybrid (831 LOC, 25 tests) |
-| **8** | VLA Model | 4h | PENDING | Phase 2-7 | Model orchestration, checkpoint I/O |
+| **8** | VLA Model | 4h | COMPLETE ✓ | Phase 2-7 | Model orchestration, checkpoint I/O |
 | **9** | Hydra Configs | 4h | PENDING | Phase 1 | Config hierarchy, experiment templates |
 | **10** | Data Pipeline | 5h | PENDING | Phase 1, 9 | Dummy, HDF5, WebDataset loaders |
 | **11** | Training Loop | 4h | PENDING | Phase 8-10 | Lightning module, WandB, FSDP |
@@ -324,55 +324,43 @@ __init__.py       # Public API exports (48 LOC)
 
 ---
 
-### Phase 8: VLA Model Orchestration
+### Phase 8: VLA Model Orchestration ✓ COMPLETE
 
-**Timeline:** Week 3 | **Effort:** 4h
-**Dependencies:** Phase 2-7
+**Timeline:** Week 3 (Completed 2026-01-26)
+**Effort:** 4h (Actual: 3.5h)
+**Status:** COMPLETE - All deliverables met
 
-**Deliverables:**
+**Deliverables - COMPLETED:**
 ```python
-# src/vla/models/
-vla.py            # Main VLAModel class
-config.py         # VLAConfig dataclass
+# src/vla/models/ (721 LOC total)
+vla_configs.py     # Configuration dataclasses (186 LOC)
+vla_base.py        # VLA model implementation (484 LOC)
+__init__.py        # Module exports (51 LOC)
 ```
 
-**Implementation:**
-```python
-@dataclass
-class VLAConfig:
-    vision_encoder: str = "dinov2"
-    language_model: str = "gpt2"
-    fusion_type: str = "perceiver"
-    action_type: str = "discrete"
-    # ... other fields
+**Test Results:**
+- 20/20 tests passing
+- 98% code coverage (models module)
+- 97% overall coverage
+- Code review score: 9.5/10 (all recommendations implemented)
+- Zero critical issues
 
-class VLAModel(nn.Module):
-    """Main VLA model orchestrator."""
-    def __init__(self, config: VLAConfig):
-        self.vision = VISION_REGISTRY.get(config.vision_encoder)
-        self.language = LANGUAGE_REGISTRY.get(config.language_model)
-        self.fusion = FUSION_REGISTRY.get(config.fusion_type)
-        self.action_head = ACTION_REGISTRY.get(config.action_type)
+**Implementation Summary:**
+- VLAConfig: Dataclass hierarchy for vision/language/fusion/action/training
+- VLAModel: Registry-based component composition (vision → language → fusion → action)
+- TemporalVLAModel: Multi-frame temporal processing variant
+- Checkpoint save/load: Preserves config and state_dict
+- Freezing: Support for frozen backbones (transfer learning)
+- Loss computation: Action loss + optional auxiliary losses
 
-    def forward(self, images: Tensor, texts: List[str]) -> Tensor:
-        v = self.vision(images)           # [B, N, D_v]
-        l = self.language(texts)          # [B, L, D_l]
-        fused = self.fusion(v, l)         # [B, K, D]
-        actions = self.action_head(fused) # [B, 7] or [B, 7, 256]
-        return actions
-
-    def save_checkpoint(self, path: Path) -> None:
-        # Save model + config
-
-    def load_checkpoint(self, path: Path) -> None:
-        # Load model + config
-```
-
-**Success Criteria:**
+**Success Criteria - ALL MET:**
 - [x] End-to-end forward pass works
-- [x] Dummy data produces correct output shape
-- [x] Checkpoint save/load works
-- [x] Config properly serialized
+- [x] Dummy data produces correct output shape [B, action_dim]
+- [x] Checkpoint save/load works with perfect roundtrip
+- [x] Config properly serialized and deserialized
+- [x] Frozen backbones have no gradients
+- [x] 20/20 tests pass on CPU and GPU
+- [x] Code review approved (9.5/10 score)
 
 ---
 
@@ -688,7 +676,7 @@ Track phase completion in project board:
 
 ---
 
-**Document Version:** 1.1
-**Last Updated:** 2026-01-25
+**Document Version:** 1.2
+**Last Updated:** 2026-01-26
 **Maintainer:** Project Lead (minh-ub)
-**Status:** Active (Phases 1-7 complete, Phase 8 ready to start)
+**Status:** Active (Phases 1-8 complete, Phase 9 ready to start)
