@@ -99,6 +99,40 @@ logger = setup_logger(__name__)
 logger = setup_logger(__name__, log_file=Path("logs/train.log"))
 ```
 
+**Hydra Configuration Helpers: `vla/utils/hydra_config_helpers.py`**
+**Purpose:** Utilities for working with Hydra/OmegaConf configurations
+**Status:** IMPLEMENTED (Phase 04 Complete)
+**LOC:** 168
+
+**Key Functions:**
+- `get_config_dir() -> Path` - Returns absolute path to configs/ directory
+- `register_resolvers()` - Registers custom OmegaConf resolvers (`env`, `mult`)
+- `validate_config(cfg)` - Validates config structure and dimensions
+- `print_config(cfg)` - Pretty-prints config via logger
+- `save_config(cfg, path)` - Saves config to YAML file
+- `flatten_config(cfg) -> Dict` - Flattens nested config to dot-notation
+
+**Usage Example:**
+```python
+from vla.utils import register_resolvers, validate_config, flatten_config
+
+# Register custom resolvers for YAML interpolations
+register_resolvers()
+
+# Validate configuration
+validate_config(cfg)
+
+# Flatten for logging to WandB/TensorBoard
+flat_config = flatten_config(cfg)
+print(flat_config["vision.name"])  # "dinov2_base"
+```
+
+**Features:**
+- Custom OmegaConf resolvers: `${env:KEY,default}` for environment variables, `${mult:x,y}` for multiplication
+- Dimension consistency checking (vision proj_dim ↔ fusion dim)
+- Path handling with automatic directory creation
+- All output via logger (no print statements)
+
 ### Registry Module: `vla/registry/`
 **Purpose:** Dynamic component instantiation via registry pattern
 **Status:** IMPLEMENTED (Phase 2 Complete)
