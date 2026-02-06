@@ -1,0 +1,372 @@
+"""Unit tests for VLA data pipeline.
+
+Tests cover:
+- DummyVLADataset: sample generation, reproducibility
+- DummyTemporalVLADataset: temporal sequences
+- vla_collate_fn: batch collation
+- temporal_vla_collate_fn: temporal batch collation
+- VLADataModule: Lightning DataModule interface
+"""
+
+import pytest
+import torch
+from torch.utils.data import DataLoader
+
+from vla.data import DummyVLADataset, VLADataModule, vla_collate_fn
+from vla.data.collate_batch_samples import temporal_vla_collate_fn
+from vla.data.dummy_vla_dataset import DummyTemporalVLADataset
+
+
+class TestDummyVLADataset:
+    """Tests for DummyVLADataset."""
+
+    def test_dataset_length(self):
+        """Test dataset reports correct length."""
+        dataset = DummyVLADataset(num_samples=100)
+        assert len(dataset) == 100
+
+    def test_sample_structure(self):
+        """Test sample contains required keys."""
+        dataset = DummyVLADataset(num_samples=10)
+        sample = dataset[0]
+
+        assert "image" in sample
+        assert "text" in sample
+        assert "action" in sample
+
+    def test_image_shape(self):
+        """Test image has correct shape."""
+        dataset = DummyVLADataset(num_samples=10, image_size=(224, 224))
+        sample = dataset[0]
+
+        assert sample["image"].shape == (3, 224, 224)
+        assert sample["image"].dtype == torch.float32
+
+    def test_image_value_range(self):
+        """Test image values are in [0, 1]."""
+        dataset = DummyVLADataset(num_samples=10)
+        sample = dataset[0]
+
+        assert sample["image"].min() >= 0.0
+        assert sample["image"].max() <= 1.0
+
+    def test_text_is_string(self):
+        """Test text is a string."""
+        dataset = DummyVLADataset(num_samples=10)
+        sample = dataset[0]
+
+        assert isinstance(sample["text"], str)
+        assert len(sample["text"]) > 0
+
+    def test_action_shape(self):
+        """Test action has correct shape."""
+        dataset = DummyVLADataset(num_samples=10, action_dim=7)
+        sample = dataset[0]
+
+        assert sample["action"].shape == (7,)
+        assert sample["action"].dtype == torch.float32
+
+    def test_action_value_range(self):
+        """Test action values are in [-1, 1]."""
+        dataset = DummyVLADataset(num_samples=10)
+        sample = dataset[0]
+
+        assert sample["action"].min() >= -1.0
+        assert sample["action"].max() <= 1.0
+
+    def test_reproducibility_same_index(self):
+        """Test same index returns same sample."""
+        dataset = DummyVLADataset(num_samples=10, seed=42)
+
+        sample1 = dataset[5]
+        sample2 = dataset[5]
+
+        assert torch.allclose(sample1["image"], sample2["image"])
+        assert sample1["text"] == sample2["text"]
+        assert torch.allclose(sample1["action"], sample2["action"])
+
+    def test_reproducibility_same_seed(self):
+        """Test same seed produces same dataset."""
+        dataset1 = DummyVLADataset(num_samples=10, seed=42)
+        dataset2 = DummyVLADataset(num_samples=10, seed=42)
+
+        sample1 = dataset1[3]
+        sample2 = dataset2[3]
+
+        assert torch.allclose(sample1["image"], sample2["image"])
+        assert sample1["text"] == sample2["text"]
+        assert torch.allclose(sample1["action"], sample2["action"])
+
+    def test_different_seed_different_data(self):
+        """Test different seeds produce different data."""
+        dataset1 = DummyVLADataset(num_samples=10, seed=42)
+        dataset2 = DummyVLADataset(num_samples=10, seed=99)
+
+        sample1 = dataset1[0]
+        sample2 = dataset2[0]
+
+        # Same text (cyclic) but different images/actions
+        assert not torch.allclose(sample1["image"], sample2["image"])
+        assert not torch.allclose(sample1["action"], sample2["action"])
+
+    def test_custom_image_size(self):
+        """Test custom image size."""
+        dataset = DummyVLADataset(num_samples=10, image_size=(128, 128))
+        sample = dataset[0]
+
+        assert sample["image"].shape == (3, 128, 128)
+
+    def test_custom_action_dim(self):
+        """Test custom action dimension."""
+        dataset = DummyVLADataset(num_samples=10, action_dim=14)
+        sample = dataset[0]
+
+        assert sample["action"].shape == (14,)
+
+    def test_get_batch(self):
+        """Test get_batch convenience method."""
+        dataset = DummyVLADataset(num_samples=10)
+        batch = dataset.get_batch(batch_size=4)
+
+        assert batch["images"].shape == (4, 3, 224, 224)
+        assert len(batch["texts"]) == 4
+        assert batch["actions"].shape == (4, 7)
+
+
+class TestDummyTemporalVLADataset:
+    """Tests for DummyTemporalVLADataset."""
+
+    def test_temporal_sample_structure(self):
+        """Test temporal sample contains required keys."""
+        dataset = DummyTemporalVLADataset(num_samples=10, num_frames=6)
+        sample = dataset[0]
+
+        assert "image_sequence" in sample
+        assert "text" in sample
+        assert "action" in sample
+
+    def test_temporal_sequence_length(self):
+        """Test image sequence has correct number of frames."""
+        dataset = DummyTemporalVLADataset(num_samples=10, num_frames=6)
+        sample = dataset[0]
+
+        assert len(sample["image_sequence"]) == 6
+
+    def test_temporal_frame_shape(self):
+        """Test each frame has correct shape."""
+        dataset = DummyTemporalVLADataset(num_samples=10, num_frames=6)
+        sample = dataset[0]
+
+        for frame in sample["image_sequence"]:
+            assert frame.shape == (3, 224, 224)
+            assert frame.dtype == torch.float32
+
+    def test_temporal_frame_value_range(self):
+        """Test each frame values are in [0, 1]."""
+        dataset = DummyTemporalVLADataset(num_samples=10, num_frames=6)
+        sample = dataset[0]
+
+        for frame in sample["image_sequence"]:
+            assert frame.min() >= 0.0
+            assert frame.max() <= 1.0
+
+    def test_temporal_custom_num_frames(self):
+        """Test custom number of frames."""
+        dataset = DummyTemporalVLADataset(num_samples=10, num_frames=12)
+        sample = dataset[0]
+
+        assert len(sample["image_sequence"]) == 12
+
+
+class TestVLACollateFn:
+    """Tests for vla_collate_fn."""
+
+    def test_collate_stacks_images(self):
+        """Test images are stacked correctly."""
+        dataset = DummyVLADataset(num_samples=10)
+        samples = [dataset[i] for i in range(4)]
+        batch = vla_collate_fn(samples)
+
+        assert batch["images"].shape == (4, 3, 224, 224)
+
+    def test_collate_collects_texts(self):
+        """Test texts are collected into list."""
+        dataset = DummyVLADataset(num_samples=10)
+        samples = [dataset[i] for i in range(4)]
+        batch = vla_collate_fn(samples)
+
+        assert len(batch["texts"]) == 4
+        assert all(isinstance(text, str) for text in batch["texts"])
+
+    def test_collate_stacks_actions(self):
+        """Test actions are stacked correctly."""
+        dataset = DummyVLADataset(num_samples=10)
+        samples = [dataset[i] for i in range(4)]
+        batch = vla_collate_fn(samples)
+
+        assert batch["actions"].shape == (4, 7)
+
+    def test_collate_single_sample(self):
+        """Test collate works with single sample."""
+        dataset = DummyVLADataset(num_samples=10)
+        samples = [dataset[0]]
+        batch = vla_collate_fn(samples)
+
+        assert batch["images"].shape == (1, 3, 224, 224)
+        assert len(batch["texts"]) == 1
+        assert batch["actions"].shape == (1, 7)
+
+    def test_collate_with_dataloader(self):
+        """Test collate function works with DataLoader."""
+        dataset = DummyVLADataset(num_samples=20)
+        loader = DataLoader(dataset, batch_size=8, collate_fn=vla_collate_fn)
+
+        batch = next(iter(loader))
+        assert batch["images"].shape == (8, 3, 224, 224)
+        assert len(batch["texts"]) == 8
+        assert batch["actions"].shape == (8, 7)
+
+
+class TestTemporalVLACollateFn:
+    """Tests for temporal_vla_collate_fn."""
+
+    def test_temporal_collate_structure(self):
+        """Test temporal batch has correct structure."""
+        dataset = DummyTemporalVLADataset(num_samples=10, num_frames=6)
+        samples = [dataset[i] for i in range(2)]
+        batch = temporal_vla_collate_fn(samples)
+
+        assert "image_sequences" in batch
+        assert "texts" in batch
+        assert "actions" in batch
+
+    def test_temporal_collate_frame_count(self):
+        """Test temporal batch has correct number of frames."""
+        dataset = DummyTemporalVLADataset(num_samples=10, num_frames=6)
+        samples = [dataset[i] for i in range(2)]
+        batch = temporal_vla_collate_fn(samples)
+
+        assert len(batch["image_sequences"]) == 6
+
+    def test_temporal_collate_frame_shape(self):
+        """Test each frame in batch has correct shape."""
+        dataset = DummyTemporalVLADataset(num_samples=10, num_frames=6)
+        samples = [dataset[i] for i in range(2)]
+        batch = temporal_vla_collate_fn(samples)
+
+        for frame_batch in batch["image_sequences"]:
+            assert frame_batch.shape == (2, 3, 224, 224)
+
+    def test_temporal_collate_actions(self):
+        """Test actions are stacked correctly."""
+        dataset = DummyTemporalVLADataset(num_samples=10, num_frames=6)
+        samples = [dataset[i] for i in range(3)]
+        batch = temporal_vla_collate_fn(samples)
+
+        assert batch["actions"].shape == (3, 7)
+
+
+class TestVLADataModule:
+    """Tests for VLADataModule."""
+
+    def test_datamodule_initialization(self):
+        """Test DataModule initializes correctly."""
+        datamodule = VLADataModule(
+            dataset_type="dummy",
+            batch_size=16,
+            num_workers=0,  # Use 0 for testing
+        )
+        assert datamodule.batch_size == 16
+        assert datamodule.dataset_type == "dummy"
+
+    def test_datamodule_setup_fit(self):
+        """Test setup creates train and val datasets."""
+        datamodule = VLADataModule(dataset_type="dummy", num_workers=0)
+        datamodule.setup("fit")
+
+        assert datamodule.train_dataset is not None
+        assert datamodule.val_dataset is not None
+        assert len(datamodule.train_dataset) > 0
+        assert len(datamodule.val_dataset) > 0
+
+    def test_datamodule_setup_test(self):
+        """Test setup creates test dataset."""
+        datamodule = VLADataModule(dataset_type="dummy", num_workers=0)
+        datamodule.setup("test")
+
+        assert datamodule.test_dataset is not None
+        assert len(datamodule.test_dataset) > 0
+
+    def test_train_dataloader(self):
+        """Test train_dataloader returns valid DataLoader."""
+        datamodule = VLADataModule(dataset_type="dummy", batch_size=8, num_workers=0)
+        datamodule.setup("fit")
+
+        train_loader = datamodule.train_dataloader()
+        batch = next(iter(train_loader))
+
+        assert batch["images"].shape[0] == 8  # Batch size
+        assert len(batch["texts"]) == 8
+        assert batch["actions"].shape[0] == 8
+
+    def test_val_dataloader(self):
+        """Test val_dataloader returns valid DataLoader."""
+        datamodule = VLADataModule(dataset_type="dummy", batch_size=8, num_workers=0)
+        datamodule.setup("fit")
+
+        val_loader = datamodule.val_dataloader()
+        batch = next(iter(val_loader))
+
+        assert batch["images"].shape[0] == 8
+        assert len(batch["texts"]) == 8
+        assert batch["actions"].shape[0] == 8
+
+    def test_test_dataloader(self):
+        """Test test_dataloader returns valid DataLoader."""
+        datamodule = VLADataModule(dataset_type="dummy", batch_size=8, num_workers=0)
+        datamodule.setup("test")
+
+        test_loader = datamodule.test_dataloader()
+        batch = next(iter(test_loader))
+
+        assert batch["images"].shape[0] == 8
+
+    def test_datamodule_without_setup_raises(self):
+        """Test accessing dataloaders without setup raises error."""
+        datamodule = VLADataModule(dataset_type="dummy", num_workers=0)
+
+        with pytest.raises(RuntimeError, match="Call setup"):
+            datamodule.train_dataloader()
+
+    def test_unsupported_dataset_type(self):
+        """Test unsupported dataset type raises error."""
+        datamodule = VLADataModule(dataset_type="unsupported", num_workers=0)
+
+        with pytest.raises(ValueError, match="Unsupported dataset_type"):
+            datamodule.setup("fit")
+
+    def test_train_val_split_ratios(self):
+        """Test train/val split ratios are respected."""
+        datamodule = VLADataModule(
+            dataset_type="dummy",
+            train_split=0.8,
+            num_workers=0,
+        )
+        datamodule.setup("fit")
+
+        train_size = len(datamodule.train_dataset)
+        val_size = len(datamodule.val_dataset)
+        total_size = train_size + val_size
+
+        # Check split is approximately correct (within 1% tolerance)
+        train_ratio = train_size / total_size
+        assert abs(train_ratio - 0.8) < 0.01
+
+    def test_datamodule_teardown(self):
+        """Test teardown cleans up datasets."""
+        datamodule = VLADataModule(dataset_type="dummy", num_workers=0)
+        datamodule.setup("fit")
+
+        assert datamodule.train_dataset is not None
+        datamodule.teardown("fit")
+        assert datamodule.train_dataset is None
