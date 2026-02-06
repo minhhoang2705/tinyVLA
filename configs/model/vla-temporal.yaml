@@ -1,0 +1,9 @@
+# Temporal VLA model for multi-frame input
+# Matches TemporalVLAModel constructor
+
+name: vla_temporal
+freeze_vision: true
+freeze_language: true
+action_loss_weight: 1.0
+auxiliary_loss_weight: 0.0
+num_frames: 6

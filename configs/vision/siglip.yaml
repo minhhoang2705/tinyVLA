@@ -1,0 +1,8 @@
+# SigLIP vision-language aligned ViT (base variant)
+# Registry: siglip | Constructor: SigLIPBackbone
+
+name: siglip
+size: base
+pretrained: true
+frozen: true
+proj_dim: null

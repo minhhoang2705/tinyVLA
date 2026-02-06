@@ -1,0 +1,14 @@
+# Multi-GPU distributed training via DDP
+# Inherits from default, overrides for multi-GPU
+
+defaults:
+  - default
+
+# DDP strategy
+strategy: ddp
+devices: -1  # All available GPUs
+accelerator: gpu
+
+# Adjusted for data parallelism
+batch_size: 16
+gradient_accumulation_steps: 4

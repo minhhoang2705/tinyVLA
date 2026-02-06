@@ -1,0 +1,29 @@
+# configs/config.yaml
+# Main configuration entry point for tinyVLA.
+#
+# Usage:
+#   python scripts/train.py                              # Load defaults
+#   python scripts/train.py vision=dinov2                # Override vision
+#   python scripts/train.py +experiment=baseline         # Load experiment preset
+#   python scripts/train.py --multirun vision=vit-base,dinov2  # Sweep
+
+defaults:
+  - model: vla-base
+  - vision: vit-base
+  - language: gpt2
+  - fusion: perceiver
+  - action: discrete
+  - train: default
+  - data: dummy
+  - _self_
+
+# Project metadata
+project:
+  name: tinyVLA
+  version: "0.1.0"
+
+# Global seed for reproducibility
+seed: 42
+
+# Output directory (auto-set by Hydra runtime)
+output_dir: ${hydra:runtime.output_dir}

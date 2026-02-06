@@ -1,0 +1,22 @@
+# @package _global_
+# Baseline VLA experiment preset
+#
+# Usage: python scripts/train.py +experiment=baseline
+
+defaults:
+  - override /model: vla-base
+  - override /vision: vit-base
+  - override /language: gpt2
+  - override /fusion: perceiver
+  - override /action: discrete
+  - override /train: default
+  - override /data: dummy
+
+project:
+  name: tinyVLA-baseline
+
+seed: 42
+
+train:
+  max_epochs: 50
+  batch_size: 32

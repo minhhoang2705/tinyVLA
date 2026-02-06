@@ -1,0 +1,8 @@
+# DINOv2 self-supervised ViT (base variant)
+# Registry: dinov2 | Constructor: DINOv2Backbone
+
+name: dinov2
+size: base
+pretrained: true
+frozen: true
+proj_dim: null

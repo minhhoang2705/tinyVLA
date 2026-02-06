@@ -1,0 +1,9 @@
+# Cross-Attention fusion (language-conditioned vision)
+# Registry: cross_attention_fusion | Constructor: CrossAttentionFusion
+# vision_dim/language_dim set at runtime from backbone embed_dim
+
+name: cross_attention_fusion
+dim: 768
+num_layers: 4
+num_heads: 8
+dropout: 0.1

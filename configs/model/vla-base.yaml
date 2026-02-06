@@ -1,0 +1,8 @@
+# Base VLA model configuration
+# Matches VLAConfig dataclass defaults in src/vla/models/vla_configs.py
+
+name: vla_base
+freeze_vision: true
+freeze_language: true
+action_loss_weight: 1.0
+auxiliary_loss_weight: 0.0

@@ -1,0 +1,16 @@
+# @package _global_
+# Vision encoder ablation study
+#
+# Usage: python scripts/train.py +experiment=ablation-vision \
+#   --multirun vision=vit-base,dinov2,siglip
+
+defaults:
+  - override /model: vla-base
+  - override /train: default
+
+project:
+  name: tinyVLA-ablation-vision
+
+train:
+  max_epochs: 30
+  batch_size: 16

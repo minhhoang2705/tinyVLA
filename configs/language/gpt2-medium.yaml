@@ -1,0 +1,9 @@
+# GPT-2 medium language encoder (larger capacity)
+# Registry: gpt2 | Constructor: GPT2Backbone
+
+name: gpt2
+model_name: gpt2-medium
+frozen: true
+output_mode: mean
+max_length: 77
+proj_dim: null

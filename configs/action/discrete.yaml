@@ -1,0 +1,8 @@
+# Discrete binned action head (RT-2 style, default)
+# Registry: discrete_action | Constructor: DiscreteActionHead
+# input_dim set at runtime from fusion.dim
+
+name: discrete_action
+action_dim: 7
+num_bins: 256
+hidden_dim: null

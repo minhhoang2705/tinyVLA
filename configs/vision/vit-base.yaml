@@ -1,0 +1,9 @@
+# ViT-Base via timm (default vision backbone)
+# Registry: timm_vit | Constructor: VisionBackbone
+
+name: timm_vit
+model_name: vit_base_patch16_224
+pretrained: true
+frozen: true
+output_mode: spatial
+proj_dim: null
