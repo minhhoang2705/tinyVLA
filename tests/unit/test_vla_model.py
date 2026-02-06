@@ -102,9 +102,9 @@ class TestVLAModel:
     def dummy_batch(self):
         """Create dummy input batch."""
         return {
-            "images": torch.randn(2, 3, 224, 224),
+            "images": torch.rand(2, 3, 224, 224),  # Valid images [0, 1]
             "texts": ["pick up the red block", "place it on the table"],
-            "target_actions": torch.rand(2, 7) * 2 - 1,  # [-1, 1]
+            "target_actions": torch.rand(2, 7) * 2 - 1,  # Valid actions [-1, 1]
         }
 
     def test_model_instantiation(self, small_config):
@@ -299,9 +299,9 @@ class TestTemporalVLAModel:
     def temporal_batch(self):
         """Create temporal input batch with 4 frames."""
         return {
-            "image_sequence": [torch.randn(2, 3, 224, 224) for _ in range(4)],
+            "image_sequence": [torch.rand(2, 3, 224, 224) for _ in range(4)],  # Valid frames [0, 1]
             "texts": ["track the moving ball", "intercept it"],
-            "target_actions": torch.rand(2, 7) * 2 - 1,
+            "target_actions": torch.rand(2, 7) * 2 - 1,  # Valid actions [-1, 1]
         }
 
     def test_temporal_forward(self, temporal_config, temporal_batch):

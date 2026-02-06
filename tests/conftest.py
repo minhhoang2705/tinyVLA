@@ -29,8 +29,8 @@ def seq_length():
 
 @pytest.fixture
 def dummy_image(batch_size):
-    """Generate dummy image tensor (B, C, H, W)."""
-    return torch.randn(batch_size, 3, 224, 224)
+    """Generate dummy image tensor (B, C, H, W) in range [0, 1]."""
+    return torch.rand(batch_size, 3, 224, 224)  # Uniform [0, 1] for valid images
 
 
 @pytest.fixture
@@ -44,9 +44,9 @@ def dummy_text():
 
 @pytest.fixture
 def dummy_actions(batch_size):
-    """Generate dummy action tensor (B, action_dim)."""
+    """Generate dummy action tensor (B, action_dim) in range [-1, 1]."""
     action_dim = 7  # Common robot action dimension
-    return torch.randn(batch_size, action_dim)
+    return torch.rand(batch_size, action_dim) * 2 - 1  # Uniform [-1, 1] for valid actions
 
 
 @pytest.fixture

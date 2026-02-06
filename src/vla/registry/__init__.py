@@ -34,6 +34,7 @@ from .factories import (
     build_language_encoder,
     build_model,
     build_vision_encoder,
+    build_vla_from_hydra,
 )
 
 __all__ = [
@@ -50,4 +51,5 @@ __all__ = [
     "build_fusion_module",
     "build_action_head",
     "build_model",
+    "build_vla_from_hydra",
 ]

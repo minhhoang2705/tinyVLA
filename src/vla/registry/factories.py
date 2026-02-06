@@ -136,3 +136,47 @@ def build_model(cfg: DictConfig) -> Any:
     name = cfg.name
     kwargs = {k: v for k, v in cfg.items() if k != "name"}
     return MODEL_REGISTRY.get(name, **kwargs)  # type: ignore
+
+
+def build_vla_from_hydra(cfg: DictConfig) -> Any:
+    """Build complete VLA model from top-level Hydra config.
+
+    Convenience function that bridges Hydra's composed config to VLAModel.
+    Handles both base and temporal model variants based on model.name.
+
+    Args:
+        cfg: Top-level Hydra DictConfig with keys:
+            model, vision, language, fusion, action, train, data, seed, etc.
+
+    Returns:
+        Instantiated VLAModel or TemporalVLAModel
+
+    Example:
+        >>> from hydra import compose, initialize
+        >>> initialize(config_path="../../configs")
+        >>> cfg = compose(config_name="config")
+        >>> model = build_vla_from_hydra(cfg)
+    """
+    from vla.models.vla_configs import VLAConfig
+
+    # Build VLAConfig from the composed sub-configs
+    config_dict = {
+        "vision": {k: v for k, v in cfg.vision.items()},
+        "language": {k: v for k, v in cfg.language.items()},
+        "fusion": {k: v for k, v in cfg.fusion.items()},
+        "action": {k: v for k, v in cfg.action.items()},
+        "freeze_vision": cfg.model.get("freeze_vision", True),
+        "freeze_language": cfg.model.get("freeze_language", True),
+        "action_loss_weight": cfg.model.get("action_loss_weight", 1.0),
+        "auxiliary_loss_weight": cfg.model.get("auxiliary_loss_weight", 0.0),
+    }
+
+    vla_config = VLAConfig.from_dict(config_dict)
+
+    # Select model class based on model.name
+    model_name = cfg.model.get("name", "vla_base")
+    if model_name == "vla_temporal":
+        num_frames = cfg.model.get("num_frames", 6)
+        return MODEL_REGISTRY.get_class("vla_temporal")(vla_config, num_frames=num_frames)
+    else:
+        return MODEL_REGISTRY.get_class("vla_base")(vla_config)

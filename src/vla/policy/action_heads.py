@@ -80,6 +80,47 @@ class DiscreteActionHead(nn.Module):
             return actions, logits
         return actions, None
 
+    def compute_loss(
+        self,
+        logits: torch.Tensor,
+        target_actions: torch.Tensor,
+        label_smoothing: float = 0.0,
+    ) -> torch.Tensor:
+        """Compute cross-entropy loss for discrete action prediction.
+
+        Args:
+            logits: Predicted logits [B, action_dim, num_bins]
+            target_actions: Ground truth actions [B, action_dim] in range [-1, 1]
+            label_smoothing: Label smoothing factor (0.0 to 1.0)
+
+        Returns:
+            Scalar loss tensor
+
+        Example:
+            >>> head = DiscreteActionHead(input_dim=768, action_dim=7)
+            >>> logits = torch.randn(4, 7, 256)
+            >>> target_actions = torch.rand(4, 7) * 2 - 1
+            >>> loss = head.compute_loss(logits, target_actions)
+            >>> loss.shape
+            torch.Size([])
+        """
+        from .action_utils import continuous_to_bins
+
+        # Convert continuous targets to bin indices
+        target_bins = continuous_to_bins(target_actions, self.num_bins)
+
+        # Reshape for cross entropy: [B * action_dim, num_bins] vs [B * action_dim]
+        B, D, _ = logits.shape
+        logits_flat = logits.reshape(B * D, self.num_bins)
+        targets_flat = target_bins.reshape(B * D)
+
+        loss = nn.functional.cross_entropy(
+            logits_flat,
+            targets_flat,
+            label_smoothing=label_smoothing,
+        )
+        return loss
+
 
 @ACTION_REGISTRY.register("gaussian_action")
 class GaussianActionHead(nn.Module):
@@ -127,17 +168,19 @@ class GaussianActionHead(nn.Module):
     def forward(
         self,
         features: torch.Tensor,
+        return_logits: bool = False,
         sample: bool = False,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> Tuple[torch.Tensor, Optional[Tuple[torch.Tensor, torch.Tensor]]]:
         """Predict Gaussian actions.
 
         Args:
             features: [B, D] pooled features or [B, K, D] sequence
+            return_logits: Whether to return (mean, std) for loss computation
             sample: Whether to sample from distribution (True for training)
 
         Returns:
             actions: [B, action_dim] in range [-1, 1]
-            std: [B, action_dim] standard deviations
+            logits: Optional (mean, std) tuple if return_logits=True
         """
         if features.ndim == 3:
             features = features.mean(dim=1)
@@ -153,7 +196,45 @@ class GaussianActionHead(nn.Module):
         else:
             actions = mean
 
-        return actions.clamp(-1, 1), std
+        actions = actions.clamp(-1, 1)
+
+        if return_logits:
+            return actions, (mean, std)
+        return actions, None
+
+    def compute_loss(
+        self,
+        mean: torch.Tensor,
+        std: torch.Tensor,
+        target_actions: torch.Tensor,
+    ) -> torch.Tensor:
+        """Compute Gaussian negative log-likelihood loss.
+
+        Args:
+            mean: Predicted mean actions [B, action_dim]
+            std: Predicted standard deviations [B, action_dim]
+            target_actions: Ground truth actions [B, action_dim] in range [-1, 1]
+
+        Returns:
+            Scalar loss tensor
+
+        Example:
+            >>> head = GaussianActionHead(input_dim=768, action_dim=7)
+            >>> mean = torch.randn(4, 7).clamp(-1, 1)
+            >>> std = torch.ones(4, 7) * 0.1
+            >>> target_actions = torch.rand(4, 7) * 2 - 1
+            >>> loss = head.compute_loss(mean, std, target_actions)
+            >>> loss.shape
+            torch.Size([])
+        """
+        # Gaussian negative log-likelihood
+        loss = nn.functional.gaussian_nll_loss(
+            mean,
+            target_actions,
+            std ** 2,  # variance
+            reduction="mean",
+        )
+        return loss
 
 
 @ACTION_REGISTRY.register("hybrid_action")
