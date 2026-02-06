@@ -42,7 +42,7 @@ From codebase analysis, these are the exact registry names to match in YAML:
 | 02 | [phase-02-component-yaml-config-files.md](phase-02-component-yaml-config-files.md) | Pending | 60m | Write 15+ YAML files for all config groups |
 | 03 | [phase-03-factory-integration-with-hydra-dictconfig.md](phase-03-factory-integration-with-hydra-dictconfig.md) | Pending | 45m | Bridge Hydra DictConfig to existing factories + VLAConfig.from_hydra() |
 | 04 | [phase-04-hydra-utility-functions-and-resolvers.md](phase-04-hydra-utility-functions-and-resolvers.md) | Complete | 45m | Utility functions: validation, resolvers, print/save helpers |
-| 05 | [phase-05-testing-and-validation-scripts.md](phase-05-testing-and-validation-scripts.md) | Pending | 60m | Test script + pytest tests for config loading, overrides, sweeps |
+| 05 | [phase-05-testing-and-validation-scripts.md](phase-05-testing-and-validation-scripts.md) | Complete ✓ | 60m | Test script + pytest tests for config loading, overrides, sweeps |
 
 ## Dependencies
 - Phase 1 (project structure) -- complete

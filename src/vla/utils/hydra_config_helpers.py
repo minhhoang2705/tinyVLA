@@ -26,13 +26,24 @@ def get_config_dir() -> Path:
     Returns:
         Path to configs/ directory relative to project root
 
+    Raises:
+        FileNotFoundError: If configs/ directory does not exist
+
     Example:
         >>> config_dir = get_config_dir()
         >>> print(config_dir)
         /path/to/tinyVLA/configs
     """
     # Navigate from src/vla/utils/ -> project root -> configs/
-    return Path(__file__).parent.parent.parent.parent / "configs"
+    config_dir = Path(__file__).parent.parent.parent.parent / "configs"
+
+    if not config_dir.exists():
+        raise FileNotFoundError(
+            f"configs/ directory not found at {config_dir}. "
+            f"Expected structure: project_root/configs/"
+        )
+
+    return config_dir
 
 
 def register_resolvers() -> None:
@@ -52,11 +63,20 @@ def register_resolvers() -> None:
         lambda key, default="": os.environ.get(key, default),
         replace=True,
     )
-    OmegaConf.register_new_resolver(
-        "mult",
-        lambda x, y: int(x) * int(y),
-        replace=True,
-    )
+
+    def _mult_resolver(x: Any, y: Any) -> int:
+        """Multiply two numeric values with validation."""
+        try:
+            result = int(x) * int(y)
+            if result > 2**31 - 1:  # Reasonable upper bound
+                logger.warning(f"mult resolver: large result {result}")
+            return result
+        except (ValueError, TypeError) as e:
+            raise ValueError(
+                f"mult resolver requires numeric arguments, got: x={x!r}, y={y!r}"
+            ) from e
+
+    OmegaConf.register_new_resolver("mult", _mult_resolver, replace=True)
     logger.info("Registered custom OmegaConf resolvers: env, mult")
 
 
