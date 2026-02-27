@@ -1,0 +1,26 @@
+# Open X-Embodiment dataset configuration
+# Placeholder for Phase 10 data pipeline
+
+name: oxe
+dataset_path: /data/oxe
+num_workers: 8
+pin_memory: true
+prefetch_factor: 2
+
+# Dataset mixing weights
+datasets:
+  - name: bridge_v2
+    weight: 0.4
+  - name: rt_1_robot
+    weight: 0.3
+  - name: kuka
+    weight: 0.3
+
+# Preprocessing
+image_size: 224
+normalize: true
+augment: false
+
+# Sequence settings
+num_frames: 1
+chunk_size: 8

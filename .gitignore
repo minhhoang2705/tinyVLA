@@ -66,11 +66,16 @@ models/
 pretrained_models/
 saved_models/
 
-# Data directories
+# Data directories (raw/downloaded data only)
 data/
 datasets/
 raw_data/
 processed_data/
+# Whitelist source code and config paths that contain "data" in path
+!src/vla/data/
+!src/vla/data/**
+!configs/data/
+!configs/data/**
 *.tar.gz
 *.zip
 *.rar
@@ -152,3 +157,4 @@ requirements-lock.txt
 .cache/
 .mypy_cache/
 .ruff_cache/
+__pycache__
