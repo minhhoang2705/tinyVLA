@@ -43,17 +43,17 @@ tests/          # Unit + integration tests
 
 | Phase | Description | Effort | Status |
 |-------|-------------|--------|--------|
-| [01](phase-01-project-setup.md) | Project setup (pyproject, structure) | 2h | Complete |
-| [02](phase-02-core-registries.md) | Registries + factory patterns | 2h | Complete |
-| [03](phase-03-nn-primitives.md) | NN primitives (attention, MLP, norm) | 4h | Complete |
-| [04](phase-04-vision-backbone.md) | Vision backbone builder (timm) | 3h | Pending |
-| [05](phase-05-language-backbone.md) | Language backbone (GPT-2) | 3h | Pending |
-| [06](phase-06-fusion.md) | Fusion mechanisms (Perceiver) | 4h | Pending |
-| [07](phase-07-action-heads.md) | Policy + action heads | 3h | Pending |
-| [08](phase-08-vla-model.md) | VLA model orchestration | 4h | Pending |
-| [09](phase-09-hydra-configs.md) | Hydra configuration system | 4h | Pending |
-| [10](phase-10-data-pipeline.md) | Data loading (OXE, WebDataset) | 5h | Pending |
-| [11](phase-11-training.md) | Training infrastructure (Lightning) | 4h | Pending |
+| [01](phase-01-project-setup.md) | Project setup (pyproject, structure) | 2h | ✅ Complete |
+| [02](phase-02-core-registries.md) | Registries + factory patterns | 2h | ✅ Complete |
+| [03](phase-03-nn-primitives.md) | NN primitives (attention, MLP, norm) | 4h | ✅ Complete |
+| [04](phase-04-vision-backbone.md) | Vision backbone builder (timm) | 3h | ✅ Complete |
+| [05](phase-05-language-backbone.md) | Language backbone (GPT-2) | 3h | ✅ Complete |
+| [06](phase-06-fusion.md) | Fusion mechanisms (Perceiver) | 4h | ✅ Complete |
+| [07](phase-07-action-heads.md) | Policy + action heads | 3h | ✅ Complete |
+| [08](phase-08-vla-model.md) | VLA model orchestration | 4h | ✅ Complete |
+| [09](phase-09-hydra-configs.md) | Hydra configuration system | 4h | ✅ Complete |
+| [10](phase-10-data-pipeline.md) | Data loading (Dummy + LeRobot HF) | 5h | ✅ Complete |
+| [11](phase-11-training.md) | Training infrastructure (Lightning) | 4h | 🔄 In Progress |
 | [12](phase-12-testing.md) | Testing suite | 2h | Pending |
 
 ## Key Dependencies
