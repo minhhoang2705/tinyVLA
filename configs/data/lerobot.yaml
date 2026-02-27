@@ -1,0 +1,13 @@
+# LeRobot dataset configuration
+# Loads robotics datasets from HuggingFace using the LeRobot format.
+# See: https://github.com/huggingface/lerobot
+
+name: lerobot
+repo_id: lerobot/pusht      # Default: small push-T task dataset (~1GB)
+image_key: null              # Auto-detect first camera if null
+action_dim: null             # Use dataset's native action dim if null
+image_size: 224
+split: train
+normalize_actions: true      # Normalize to [-1, 1] using stats.json
+num_workers: 4
+pin_memory: true

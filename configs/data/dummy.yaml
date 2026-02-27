@@ -1,0 +1,9 @@
+# Dummy synthetic dataset for testing (default)
+# Uses DummyVLADataset from src/vla/data/
+
+name: dummy
+num_samples: 1000
+image_size: 224
+action_dim: ${action.action_dim}
+num_workers: 4
+pin_memory: true

@@ -6,7 +6,12 @@ Tests cover:
 - vla_collate_fn: batch collation
 - temporal_vla_collate_fn: temporal batch collation
 - VLADataModule: Lightning DataModule interface
+- LeRobotVLADataset: LeRobot format adapter (mocked)
 """
+
+import types
+from typing import Dict
+from unittest.mock import MagicMock, patch
 
 import pytest
 import torch
@@ -370,3 +375,191 @@ class TestVLADataModule:
         assert datamodule.train_dataset is not None
         datamodule.teardown("fit")
         assert datamodule.train_dataset is None
+
+
+# ---------------------------------------------------------------------------
+# Helpers for LeRobot tests — build a fake LeRobotDataset without real data
+# ---------------------------------------------------------------------------
+
+
+def _make_fake_lerobot_module() -> types.ModuleType:
+    """Create a fake `lerobot` package so imports don't fail."""
+    lerobot_mod = types.ModuleType("lerobot")
+    common_mod = types.ModuleType("lerobot.common")
+    datasets_mod = types.ModuleType("lerobot.common.datasets")
+    ds_mod = types.ModuleType("lerobot.common.datasets.lerobot_dataset")
+    lerobot_mod.common = common_mod
+    common_mod.datasets = datasets_mod
+    datasets_mod.lerobot_dataset = ds_mod
+    return lerobot_mod, ds_mod
+
+
+def _make_mock_lerobot_ds(
+    num_samples: int = 10,
+    action_dim: int = 2,
+    task_descriptions: Dict[int, str] | None = None,
+) -> MagicMock:
+    """Build a MagicMock that mimics LeRobotDataset's interface."""
+    import torch
+
+    if task_descriptions is None:
+        task_descriptions = {0: "push the T block to the target zone"}
+
+    # Build fake samples: each has image tensor, action tensor, task_index
+    fake_image = torch.rand(3, 96, 96)  # raw camera resolution
+    fake_action = torch.tensor([0.5, -0.3] + [0.0] * (action_dim - 2), dtype=torch.float32)
+
+    def getitem(idx: int) -> Dict:
+        return {
+            "observation.images.top": fake_image.clone(),
+            "action": fake_action.clone(),
+            "task_index": torch.tensor(0),
+        }
+
+    mock_ds = MagicMock()
+    mock_ds.__len__ = MagicMock(return_value=num_samples)
+    mock_ds.__getitem__ = MagicMock(side_effect=getitem)
+    mock_ds.features = {
+        "observation.images.top": {"shape": [3, 96, 96]},
+        "action": {"shape": [action_dim]},
+    }
+    mock_ds.tasks = task_descriptions
+    mock_ds.stats = {
+        "action": {
+            "mean": [0.0] * action_dim,
+            "std": [1.0] * action_dim,
+        }
+    }
+    return mock_ds
+
+
+class TestLeRobotVLADataset:
+    """Tests for LeRobotVLADataset (uses mocked LeRobotDataset)."""
+
+    def _make_adapter(self, **kwargs):
+        """Instantiate the adapter with a fully mocked lerobot dependency."""
+        import sys
+
+        lerobot_mod, ds_mod = _make_fake_lerobot_module()
+        mock_inner = _make_mock_lerobot_ds(**kwargs)
+        ds_mod.LeRobotDataset = MagicMock(return_value=mock_inner)
+
+        # Inject mock modules so `import lerobot` succeeds inside the adapter
+        with patch.dict(
+            sys.modules,
+            {
+                "lerobot": lerobot_mod,
+                "lerobot.common": lerobot_mod.common,
+                "lerobot.common.datasets": lerobot_mod.common.datasets,
+                "lerobot.common.datasets.lerobot_dataset": ds_mod,
+            },
+        ):
+            from vla.data.lerobot_dataset import LeRobotVLADataset
+
+            adapter = LeRobotVLADataset(repo_id="lerobot/pusht")
+        return adapter, mock_inner
+
+    def test_lerobot_dataset_init_with_mock(self):
+        """Adapter initializes and maps samples correctly."""
+        adapter, _ = self._make_adapter()
+
+        assert len(adapter) == 10
+        sample = adapter[0]
+        assert set(sample.keys()) == {"image", "text", "action"}
+
+    def test_lerobot_image_resize(self):
+        """Output image is always resized to [3, 224, 224]."""
+        adapter, _ = self._make_adapter()
+
+        sample = adapter[0]
+        # Raw image was 96×96; adapter must resize to (224, 224)
+        assert sample["image"].shape == (3, 224, 224)
+        assert sample["image"].dtype == import_torch().float32
+
+    def test_lerobot_image_value_range(self):
+        """Image pixel values stay in [0, 1]."""
+        adapter, _ = self._make_adapter()
+
+        img = adapter[0]["image"]
+        assert img.min() >= 0.0
+        assert img.max() <= 1.0
+
+    def test_lerobot_text_lookup(self):
+        """task_index is mapped to the correct task description string."""
+        tasks = {0: "push the T block to the target zone", 1: "place object on shelf"}
+        adapter, _ = self._make_adapter(task_descriptions=tasks)
+
+        text = adapter[0]["text"]
+        assert text == "push the T block to the target zone"
+        assert isinstance(text, str)
+
+    def test_lerobot_action_normalization(self):
+        """Normalized actions are clamped to [-1, 1]."""
+        adapter, mock_inner = self._make_adapter(action_dim=2)
+
+        # Override stats to force extreme raw values that need clamping
+        mock_inner.stats = {"action": {"mean": [100.0, 100.0], "std": [1.0, 1.0]}}
+        # Reload normalization stats on the already-built adapter
+        adapter._action_mean, adapter._action_std = adapter._load_action_stats()
+
+        action = adapter[0]["action"]
+        assert action.shape == (2,)
+        assert action.min() >= -1.0
+        assert action.max() <= 1.0
+
+    def test_lerobot_action_dim_slice(self):
+        """action_dim parameter correctly slices the action tensor."""
+        import sys
+
+        lerobot_mod, ds_mod = _make_fake_lerobot_module()
+        mock_inner = _make_mock_lerobot_ds(action_dim=6)
+        ds_mod.LeRobotDataset = MagicMock(return_value=mock_inner)
+
+        with patch.dict(
+            sys.modules,
+            {
+                "lerobot": lerobot_mod,
+                "lerobot.common": lerobot_mod.common,
+                "lerobot.common.datasets": lerobot_mod.common.datasets,
+                "lerobot.common.datasets.lerobot_dataset": ds_mod,
+            },
+        ):
+            from vla.data.lerobot_dataset import LeRobotVLADataset
+
+            adapter = LeRobotVLADataset(repo_id="lerobot/pusht", action_dim=3)
+
+        action = adapter[0]["action"]
+        assert action.shape == (3,)
+
+    def test_lerobot_missing_image_key_raises(self):
+        """Accessing a non-existent image key raises KeyError."""
+        import sys
+
+        lerobot_mod, ds_mod = _make_fake_lerobot_module()
+        mock_inner = _make_mock_lerobot_ds()
+        ds_mod.LeRobotDataset = MagicMock(return_value=mock_inner)
+
+        with patch.dict(
+            sys.modules,
+            {
+                "lerobot": lerobot_mod,
+                "lerobot.common": lerobot_mod.common,
+                "lerobot.common.datasets": lerobot_mod.common.datasets,
+                "lerobot.common.datasets.lerobot_dataset": ds_mod,
+            },
+        ):
+            from vla.data.lerobot_dataset import LeRobotVLADataset
+
+            # Force wrong image_key after init to trigger per-sample error
+            adapter = LeRobotVLADataset(repo_id="lerobot/pusht")
+            adapter.image_key = "observation.images.nonexistent"
+
+        with pytest.raises(KeyError, match="nonexistent"):
+            _ = adapter[0]
+
+
+def import_torch():
+    """Small helper to import torch (avoids top-level import duplication)."""
+    import torch
+
+    return torch
