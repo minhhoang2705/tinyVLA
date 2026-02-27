@@ -73,6 +73,7 @@ class VLADataModule(LightningDataModule):
         image_size: tuple[int, int] = (224, 224),
         action_dim: Optional[int] = None,
         seed: int = 42,
+        total_samples: int = 1000,
         # LeRobot-specific params (only used when dataset_type="lerobot")
         repo_id: str = "lerobot/pusht",
         image_key: Optional[str] = None,
@@ -85,6 +86,7 @@ class VLADataModule(LightningDataModule):
         self.image_size = image_size
         self.action_dim = action_dim
         self.seed = seed
+        self.total_samples = total_samples
         self.repo_id = repo_id
         self.image_key = image_key
 
@@ -110,7 +112,7 @@ class VLADataModule(LightningDataModule):
         if stage == "fit" or stage is None:
             if self.dataset_type == "dummy":
                 # Calculate split sizes
-                total_samples = 10000  # Default size for dummy dataset
+                total_samples = self.total_samples
                 train_size = int(total_samples * self.train_split)
                 val_size = total_samples - train_size
 

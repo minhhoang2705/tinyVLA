@@ -45,6 +45,7 @@ def _build_datamodule(cfg: DictConfig):
         dataset_type=dataset_type,
         batch_size=cfg.train.get("batch_size", 32),
         num_workers=cfg.train.get("num_workers", 4),
+        total_samples=data_cfg.get("num_samples", 1000),
     )
 
     # Pass LeRobot-specific params if present
@@ -165,7 +166,7 @@ def main(cfg: DictConfig) -> None:
 
     # --- Trainer ---
     trainer = pl.Trainer(
-        max_epochs=train_cfg.get("max_epochs", 100),
+        max_epochs=train_cfg.get("epochs", train_cfg.get("max_epochs", 100)),
         precision=train_cfg.get("precision", "bf16-mixed"),
         devices=train_cfg.get("devices", "auto"),
         gradient_clip_val=train_cfg.get("gradient_clip_val", 1.0),
