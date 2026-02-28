@@ -90,9 +90,7 @@ class VLALightningModule(pl.LightningModule):
         """
         return self.model(images, texts=texts, target_actions=target_actions)
 
-    def _shared_step(
-        self, batch: Dict[str, Any], stage: str
-    ) -> torch.Tensor:
+    def _shared_step(self, batch: Dict[str, Any], stage: str) -> torch.Tensor:
         """Shared logic for train/val steps.
 
         Both steps have identical forward pass; only logging differs
@@ -124,9 +122,7 @@ class VLALightningModule(pl.LightningModule):
         )
         return loss
 
-    def training_step(
-        self, batch: Dict[str, Any], batch_idx: int
-    ) -> torch.Tensor:
+    def training_step(self, batch: Dict[str, Any], batch_idx: int) -> torch.Tensor:
         """Compute loss on a training batch.
 
         Args:
@@ -138,9 +134,7 @@ class VLALightningModule(pl.LightningModule):
         """
         return self._shared_step(batch, "train")
 
-    def validation_step(
-        self, batch: Dict[str, Any], batch_idx: int
-    ) -> torch.Tensor:
+    def validation_step(self, batch: Dict[str, Any], batch_idx: int) -> torch.Tensor:
         """Compute loss on a validation batch.
 
         Args:
@@ -151,6 +145,39 @@ class VLALightningModule(pl.LightningModule):
             Scalar validation loss
         """
         return self._shared_step(batch, "val")
+
+    def test_step(self, batch: Dict[str, Any], batch_idx: int) -> torch.Tensor:
+        """Compute loss + action-quality metrics on a test batch.
+
+        In addition to cross-entropy loss (via _shared_step), computes MSE
+        and MAE between predicted and target actions to measure continuous
+        action quality.
+
+        Args:
+            batch: Dict with "images", "texts", "actions"
+            batch_idx: Index of current batch (unused, required by PL)
+
+        Returns:
+            Scalar test loss
+        """
+        images: torch.Tensor = batch["images"]
+        texts: List[str] = batch["texts"]
+        target_actions: torch.Tensor = batch["actions"]
+
+        # Cross-entropy loss via shared step (also logs test/loss)
+        loss = self._shared_step(batch, "test")
+
+        # Action-quality metrics in continuous action space [-1, 1]
+        with torch.no_grad():
+            predicted_actions = self.model.predict(images, texts)
+
+        mse = torch.nn.functional.mse_loss(predicted_actions, target_actions)
+        mae = torch.nn.functional.l1_loss(predicted_actions, target_actions)
+
+        self.log("test/mse", mse, on_epoch=True, sync_dist=True)
+        self.log("test/mae", mae, on_epoch=True, sync_dist=True)
+
+        return loss
 
     def configure_optimizers(self) -> Dict[str, Any]:
         """Set up AdamW optimizer with cosine LR schedule + warmup.
@@ -194,7 +221,7 @@ class VLALightningModule(pl.LightningModule):
             "optimizer": optimizer,
             "lr_scheduler": {
                 "scheduler": scheduler,
-                "interval": "step",   # update every step, not epoch
+                "interval": "step",  # update every step, not epoch
                 "frequency": 1,
             },
         }

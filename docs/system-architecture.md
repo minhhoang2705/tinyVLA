@@ -925,6 +925,12 @@ VLALightningModule (nn.Module)
         │   ├─ Optional: Action MAE vs ground truth
         │   └─ Log metrics
         │
+        ├─ test_step(batch) [NEW - Phase 12]
+        │   ├─ Compute test loss
+        │   ├─ Compute MSE/MAE on predicted vs target actions
+        │   ├─ Log test/loss, test/mse, test/mae (sync_dist=True)
+        │   └─ Return loss
+        │
         └─ Trainer (Lightning)
             ├─ Handle distributed training (FSDP, DDP)
             ├─ Mixed precision (AMP)
@@ -932,6 +938,12 @@ VLALightningModule (nn.Module)
             ├─ Early stopping
             └─ WandB integration
 ```
+
+**test_step Implementation (Phase 12):**
+- Added MSE and MAE metrics to quantify action prediction quality
+- Uses `model.predict()` for inference (no gradient computation)
+- Logs metrics with `sync_dist=True` for distributed evaluation
+- Enables checkpoint evaluation via `scripts/eval.py`
 
 ### Multi-GPU Training (FSDP)
 
@@ -953,7 +965,57 @@ PyTorch Lightning handles FSDP automatically:
     trainer = Trainer(strategy=strategy, devices=4)
 ```
 
-## 8. Module Dependencies
+## 8. Evaluation Pipeline (Phase 12)
+
+### scripts/eval.py Entry Point
+
+```
+Evaluation Workflow
+        │
+        ├─ Load checkpoint (supports .ckpt or .pt)
+        │   ├─ .ckpt (PyTorch Lightning format)
+        │   │   └─ VLALightningModule.load_from_checkpoint()
+        │   │
+        │   └─ .pt (VLAModel format)
+        │       ├─ VLAModel.load_checkpoint()
+        │       └─ Wrap in fresh VLALightningModule
+        │
+        ├─ Build data module (same as training)
+        │   └─ DummyDataset or LeRobot
+        │
+        ├─ Create Trainer (evaluation-specific settings)
+        │   ├─ accelerator="auto" (GPU if available)
+        │   ├─ logger=False (no logging overhead)
+        │   └─ enable_checkpointing=False
+        │
+        └─ Run test evaluation
+            └─ trainer.test(module, datamodule=dm)
+                ├─ Logs test/loss
+                ├─ Logs test/mse
+                ├─ Logs test/mae
+                └─ Prints results to stdout
+```
+
+**Usage:**
+```bash
+# Evaluate PyTorch Lightning checkpoint
+python scripts/eval.py +eval.checkpoint=outputs/checkpoints/last.ckpt
+
+# Evaluate raw VLAModel checkpoint
+python scripts/eval.py +eval.checkpoint=outputs/model.pt data=dummy
+
+# With custom data config
+python scripts/eval.py +eval.checkpoint=path/to/ckpt.pt data=lerobot
+```
+
+**Error Handling:**
+- Raises `ValueError` if `+eval.checkpoint` not provided
+- Raises `FileNotFoundError` if checkpoint path doesn't exist
+- Helpful error messages for unrecognized file extensions
+
+---
+
+## 9. Module Dependencies
 
 ### Dependency Graph
 
@@ -979,11 +1041,19 @@ models/ (IMPLEMENTED Phase 8 - depends on backbones, fusion, policy, registry)
     └─ policy.action_utils (loss computation)
 
     ↓
-training/ (PENDING Phase 11 - depends on models, utils, pytorch-lightning)
+data/ (IMPLEMENTED Phase 10 - depends on utils, pytorch-lightning)
+    ├─ datamodule.py (VLADataModule Lightning wrapper)
+    ├─ dummy.py (dummy dataset generator)
+    └─ lerobot.py (LeRobot integration)
+
     ↓
-data/ (PENDING Phase 10 - depends on utils)
+training/ (IMPLEMENTED Phase 11 - depends on models, data, utils, pytorch-lightning)
+    ├─ lightning_module.py (VLALightningModule with test_step)
+    └─ utils.py (training utilities)
+
     ↓
-train.py (depends on all modules)
+scripts/train.py (depends on all modules + hydra)
+scripts/eval.py (depends on models, data, training + hydra) [NEW - Phase 12]
 ```
 
 **Circular Dependency Prevention:**
@@ -1073,6 +1143,6 @@ Reproducibility:
 
 ---
 
-**Document Version:** 1.3
-**Last Updated:** 2026-01-26
-**Status:** Active (Phases 2-8 complete, VLA orchestration implemented)
+**Document Version:** 1.4
+**Last Updated:** 2026-02-28
+**Status:** COMPLETE (All 12 phases implemented, full VLA framework with training + evaluation)

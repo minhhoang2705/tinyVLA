@@ -23,6 +23,7 @@ from vla.training import VLALightningModule
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _tiny_config() -> VLAConfig:
     """Return a minimal VLAConfig that loads quickly (no pretrained weights)."""
     return VLAConfig(
@@ -48,6 +49,7 @@ def _tiny_config() -> VLAConfig:
 # Tests
 # ---------------------------------------------------------------------------
 
+
 class TestVLALightningModuleInit:
     """Verify module builds correctly and applies backbone freezing."""
 
@@ -62,18 +64,18 @@ class TestVLALightningModuleInit:
         vision_params = list(module.model.vision.parameters())
         assert len(vision_params) > 0, "Vision backbone has no parameters"
         # All vision params should be frozen
-        assert all(not p.requires_grad for p in vision_params), (
-            "Vision backbone has trainable parameters — should be frozen"
-        )
+        assert all(
+            not p.requires_grad for p in vision_params
+        ), "Vision backbone has trainable parameters — should be frozen"
 
     def test_language_backbone_is_frozen(self):
         """Language backbone must have no trainable parameters after init."""
         module = VLALightningModule(model_cfg=_tiny_config())
         lang_params = list(module.model.language.parameters())
         assert len(lang_params) > 0, "Language backbone has no parameters"
-        assert all(not p.requires_grad for p in lang_params), (
-            "Language backbone has trainable parameters — should be frozen"
-        )
+        assert all(
+            not p.requires_grad for p in lang_params
+        ), "Language backbone has trainable parameters — should be frozen"
 
     def test_fusion_and_action_head_are_trainable(self):
         """Fusion module and action head must remain trainable after init."""
@@ -91,9 +93,9 @@ class TestVLALightningModuleInit:
             weight_decay=1e-5,
             warmup_steps=500,
         )
-        assert module.learning_rate == 3e-4
-        assert module.weight_decay == 1e-5
-        assert module.warmup_steps == 500
+        assert module.hparams.learning_rate == 3e-4
+        assert module.hparams.weight_decay == 1e-5
+        assert module.hparams.warmup_steps == 500
 
 
 class TestConfigureOptimizers:
@@ -124,18 +126,14 @@ class TestConfigureOptimizers:
         optimizer = result["optimizer"]
 
         # Collect all param tensors in the optimizer
-        opt_param_ids = {
-            id(p)
-            for group in optimizer.param_groups
-            for p in group["params"]
-        }
+        opt_param_ids = {id(p) for group in optimizer.param_groups for p in group["params"]}
 
         # Check no frozen param leaked into the optimizer
         for param in module.model.parameters():
             if not param.requires_grad:
-                assert id(param) not in opt_param_ids, (
-                    "Frozen parameter found in optimizer — only trainable params should be optimized"
-                )
+                assert (
+                    id(param) not in opt_param_ids
+                ), "Frozen parameter found in optimizer — only trainable params should be optimized"
 
     def test_configure_optimizers_has_lr_scheduler(self):
         """Result dict should include a cosine LR scheduler."""
@@ -187,9 +185,9 @@ class TestTrainingStep:
 
         # Verify log was called with the expected metric name
         logged_keys = [call.args[0] for call in module.log.call_args_list]
-        assert "train/loss" in logged_keys, (
-            f"Expected 'train/loss' to be logged, got: {logged_keys}"
-        )
+        assert (
+            "train/loss" in logged_keys
+        ), f"Expected 'train/loss' to be logged, got: {logged_keys}"
 
     def test_validation_step_logs_val_loss(self):
         """validation_step must log 'val/loss' with sync_dist=True."""
@@ -202,15 +200,41 @@ class TestTrainingStep:
         module.validation_step(batch, batch_idx=0)
 
         logged_keys = [call.args[0] for call in module.log.call_args_list]
-        assert "val/loss" in logged_keys, (
-            f"Expected 'val/loss' to be logged, got: {logged_keys}"
-        )
+        assert "val/loss" in logged_keys, f"Expected 'val/loss' to be logged, got: {logged_keys}"
 
         # sync_dist should be True for val
         val_call = next(c for c in module.log.call_args_list if c.args[0] == "val/loss")
-        assert val_call.kwargs.get("sync_dist") is True, (
-            "val/loss should be logged with sync_dist=True for distributed training"
-        )
+        assert (
+            val_call.kwargs.get("sync_dist") is True
+        ), "val/loss should be logged with sync_dist=True for distributed training"
+
+    def test_test_step_returns_loss_tensor(self):
+        """test_step must return a scalar loss tensor."""
+        module = VLALightningModule(model_cfg=_tiny_config())
+        module.eval()
+
+        batch = self._make_batch()
+        module.log = MagicMock()
+
+        loss = module.test_step(batch, batch_idx=0)
+        assert isinstance(loss, torch.Tensor), "test_step loss must be a tensor"
+        assert loss.ndim == 0, "test_step loss must be scalar"
+
+    def test_test_step_logs_loss_mse_mae(self):
+        """test_step must log test/loss, test/mse, test/mae."""
+        module = VLALightningModule(model_cfg=_tiny_config())
+        module.eval()
+
+        batch = self._make_batch()
+        module.log = MagicMock()
+
+        module.test_step(batch, batch_idx=0)
+
+        logged_keys = [call.args[0] for call in module.log.call_args_list]
+        for expected_key in ("test/loss", "test/mse", "test/mae"):
+            assert (
+                expected_key in logged_keys
+            ), f"Expected '{expected_key}' to be logged, got: {logged_keys}"
 
     def test_forward_passthrough_returns_dict(self):
         """forward() must return dict with 'actions' key."""
@@ -224,6 +248,7 @@ class TestTrainingStep:
             output = module(images, texts)
 
         assert "actions" in output, "forward() output must contain 'actions'"
-        assert output["actions"].shape == (2, 7), (
-            f"Expected actions shape (2, 7), got {output['actions'].shape}"
-        )
+        assert output["actions"].shape == (
+            2,
+            7,
+        ), f"Expected actions shape (2, 7), got {output['actions'].shape}"
