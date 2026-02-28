@@ -45,7 +45,7 @@ def _build_datamodule(cfg: DictConfig):
         dataset_type=dataset_type,
         batch_size=cfg.train.get("batch_size", 32),
         num_workers=cfg.train.get("num_workers", 4),
-        total_samples=data_cfg.get("num_samples", 1000),
+        total_samples=data_cfg.get("num_samples", 10000),
     )
 
     # Pass LeRobot-specific params if present
@@ -104,20 +104,21 @@ def _build_callbacks(cfg: DictConfig, output_dir: Path) -> list:
     return callbacks
 
 
-def _build_loggers(cfg: DictConfig) -> list:
+def _build_loggers(cfg: DictConfig, output_dir: Path) -> list:
     """Build PL loggers from config.
 
     Adds WandbLogger if train.use_wandb=true, else CSV logger only.
 
     Args:
         cfg: Full Hydra config
+        output_dir: Directory where CSV logs will be saved
 
     Returns:
         List of pytorch_lightning logger instances
     """
     from pytorch_lightning.loggers import CSVLogger
 
-    loggers = [CSVLogger(save_dir=".", name="csv_logs")]
+    loggers = [CSVLogger(save_dir=str(output_dir), name="csv_logs")]
 
     if cfg.train.get("use_wandb", False):
         from pytorch_lightning.loggers import WandbLogger
@@ -176,7 +177,7 @@ def main(cfg: DictConfig) -> None:
         val_check_interval=train_cfg.get("val_check_interval", 0.25),
         log_every_n_steps=train_cfg.get("log_every_n_steps", 50),
         callbacks=_build_callbacks(cfg, output_dir),
-        logger=_build_loggers(cfg),
+        logger=_build_loggers(cfg, output_dir),
         deterministic=False,  # set True for full reproducibility at cost of speed
     )
 

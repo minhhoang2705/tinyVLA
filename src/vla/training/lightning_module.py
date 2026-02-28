@@ -57,9 +57,6 @@ class VLALightningModule(pl.LightningModule):
 
         # Save hyperparameters (excludes model_cfg to avoid serialization issues)
         self.save_hyperparameters(ignore=["model_cfg"])
-        self.learning_rate = learning_rate
-        self.weight_decay = weight_decay
-        self.warmup_steps = warmup_steps
 
         # Build VLAModel from config — handles dict, DictConfig, and VLAConfig
         if isinstance(model_cfg, DictConfig):
@@ -170,8 +167,8 @@ class VLALightningModule(pl.LightningModule):
         trainable_params = self.model.get_trainable_params()
         optimizer = torch.optim.AdamW(
             trainable_params,
-            lr=self.learning_rate,
-            weight_decay=self.weight_decay,
+            lr=self.hparams.learning_rate,
+            weight_decay=self.hparams.weight_decay,
         )
 
         # Total steps: use PL's estimate when available (requires trainer attached).
@@ -189,7 +186,7 @@ class VLALightningModule(pl.LightningModule):
 
         scheduler = get_cosine_schedule_with_warmup(
             optimizer,
-            num_warmup_steps=self.warmup_steps,
+            num_warmup_steps=self.hparams.warmup_steps,
             num_training_steps=total_steps,
         )
 
