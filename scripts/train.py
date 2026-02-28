@@ -88,13 +88,15 @@ def _build_callbacks(cfg: DictConfig, output_dir: Path) -> list:
     ]
 
     early_stop_cfg = train_cfg.get("early_stopping", {})
-    if early_stop_cfg:
+    # Only add EarlyStopping when explicitly enabled; read its own monitor/mode
+    # so it stays decoupled from ModelCheckpoint config.
+    if early_stop_cfg and early_stop_cfg.get("enabled", True):
         callbacks.append(
             EarlyStopping(
-                monitor=checkpoint_cfg.get("monitor", "val/loss"),
+                monitor=early_stop_cfg.get("monitor", "val/loss"),
                 patience=early_stop_cfg.get("patience", 10),
                 min_delta=early_stop_cfg.get("min_delta", 0.001),
-                mode=checkpoint_cfg.get("mode", "min"),
+                mode=early_stop_cfg.get("mode", "min"),
                 verbose=True,
             )
         )

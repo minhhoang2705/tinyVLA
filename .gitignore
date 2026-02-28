@@ -90,6 +90,7 @@ wandb/
 mlruns/
 .wandb/
 lightning_logs/
+csv_logs/
 
 # Jupyter and IPython
 .ipynb_checkpoints

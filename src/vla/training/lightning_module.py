@@ -174,15 +174,17 @@ class VLALightningModule(pl.LightningModule):
             weight_decay=self.weight_decay,
         )
 
-        # Total steps: use PL's estimate when available (requires trainer attached)
-        # Fall back to a large number so warmup still fires correctly
-        try:
+        # Total steps: use PL's estimate when available (requires trainer attached).
+        # Fall back to a large number so warmup still fires correctly.
+        # We check self.trainer explicitly rather than catching a broad Exception
+        # so real errors (e.g. misconfigured datamodule) still propagate.
+        if self.trainer is not None:
             total_steps = int(self.trainer.estimated_stepping_batches)
-        except Exception:
+        else:
             total_steps = 100_000
             logger.warning(
-                "Could not estimate total training steps; "
-                f"defaulting to {total_steps} for LR schedule."
+                "Trainer not attached; could not estimate total training steps. "
+                f"Defaulting to {total_steps} for LR schedule."
             )
 
         scheduler = get_cosine_schedule_with_warmup(

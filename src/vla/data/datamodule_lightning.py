@@ -169,7 +169,9 @@ class VLADataModule(LightningDataModule):
 
         if stage == "test" or stage is None:
             if self.dataset_type == "dummy":
-                test_size = 1000
+                # Mirror the val split: use the non-training fraction of total_samples
+                # so test_size scales with the user's total_samples setting.
+                test_size = self.total_samples - int(self.total_samples * self.train_split)
                 logger.info(f"Creating dummy test dataset: test={test_size}")
 
                 self.test_dataset = DummyVLADataset(
