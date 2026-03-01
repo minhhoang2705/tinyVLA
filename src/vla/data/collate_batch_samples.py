@@ -13,9 +13,12 @@ Example:
     >>> batch['images'].shape  # torch.Size([16, 3, 224, 224])
 """
 
-from typing import Any, Dict, List
+from typing import TYPE_CHECKING, Any, Callable, Dict, List
 
 import torch
+
+if TYPE_CHECKING:
+    from transformers import PreTrainedTokenizerBase
 
 
 def vla_collate_fn(batch: List[Dict[str, Any]]) -> Dict[str, torch.Tensor | List[str]]:
@@ -58,6 +61,58 @@ def vla_collate_fn(batch: List[Dict[str, Any]]) -> Dict[str, torch.Tensor | List
         "texts": texts,
         "actions": actions,
     }
+
+
+def make_tokenized_collate_fn(
+    tokenizer: "PreTrainedTokenizerBase",
+    max_length: int = 77,
+) -> Callable:
+    """Return a collate_fn that tokenizes text in DataLoader workers.
+
+    Moves CPU tokenization out of the GPU forward pass, eliminating
+    CPU-GPU sync stalls and enabling parallel tokenization across workers.
+    The returned collate_fn produces 'input_ids' and 'attention_mask' keys
+    instead of 'texts', which VLAModel.forward() already supports.
+
+    Args:
+        tokenizer: HuggingFace tokenizer (must be picklable for multiprocessing).
+        max_length: Maximum token sequence length. Default 77 (CLIP-style).
+
+    Returns:
+        collate_fn compatible with DataLoader's collate_fn parameter.
+
+    Example:
+        >>> from transformers import AutoTokenizer
+        >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
+        >>> tokenizer.pad_token = tokenizer.eos_token
+        >>> collate_fn = make_tokenized_collate_fn(tokenizer, max_length=77)
+        >>> batch = collate_fn([dataset[i] for i in range(4)])
+        >>> batch['input_ids'].shape  # torch.Size([4, 77])
+    """
+
+    def collate_fn(batch: List[Dict[str, Any]]) -> Dict[str, Any]:
+        images = torch.stack([sample["image"] for sample in batch])
+        texts = [sample["text"] for sample in batch]
+        actions = torch.stack([sample["action"] for sample in batch])
+
+        # Tokenize in worker process — runs in parallel with GPU compute
+        encoded = tokenizer(
+            texts,
+            padding="max_length",
+            truncation=True,
+            max_length=max_length,
+            return_tensors="pt",
+        )
+
+        return {
+            "images": images,
+            "input_ids": encoded["input_ids"],           # [B, max_length]
+            "attention_mask": encoded["attention_mask"],  # [B, max_length]
+            "actions": actions,
+            "texts": texts,  # Keep for debugging/logging
+        }
+
+    return collate_fn
 
 
 def temporal_vla_collate_fn(

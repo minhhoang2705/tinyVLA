@@ -1,0 +1,25 @@
+# @package _global_
+
+defaults:
+  - override /data: lerobot
+
+data:
+  repo_id: lerobot/pusht
+  # Auto-detect thường sẽ tìm thấy observation.image, nhưng mình cứ khai báo rõ ràng
+  image_key: observation.image  
+  action_dim: 2
+
+model:
+  action:
+    # Push-T chỉ dùng hành động 2D (x, y) để đẩy khối
+    action_dim: 2
+    num_bins: 256
+
+train:
+  epochs: 50
+  batch_size: 16             # An toàn cho 12GB VRAM (nếu còn dư VRAM có thể đẩy lên 32)
+  num_workers: 8
+  learning_rate: 3e-4
+  precision: "16-mixed"      # Kích hoạt Tensor Cores của RTX 4070Ti để train nhanh hơn
+  log_every_n_steps: 10
+  use_wandb: false           # Đổi thành true nếu sếp muốn log lên Weights & Biases

@@ -10,7 +10,7 @@ Example:
     >>> # Use with pytorch_lightning.Trainer
 """
 
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List, Optional, Union
 
 import pytorch_lightning as pl
 import torch
@@ -72,11 +72,32 @@ class VLALightningModule(pl.LightningModule):
             f"weight_decay={weight_decay}, warmup_steps={warmup_steps}"
         )
 
+    def setup(self, stage: str) -> None:
+        """Apply torch.compile after Trainer places model on device.
+
+        Called by PL Trainer after device placement. Compiling in __init__
+        (before device move) causes compilation for the wrong device.
+        Only compile during 'fit' to avoid overhead during test/predict.
+
+        Compile target: action_head only — fusion uses gradient checkpointing
+        (compile + checkpoint on the same module causes Inductor graph failures).
+
+        Args:
+            stage: PL lifecycle stage ('fit', 'validate', 'test', 'predict')
+        """
+        if stage == "fit":
+            self.model.action_head = torch.compile(
+                self.model.action_head,
+                backend="inductor",
+                mode="reduce-overhead",  # Reduces kernel launch overhead (best for small linear layers)
+            )
+            logger.info("torch.compile applied to model.action_head (inductor, reduce-overhead)")
+
     def forward(
         self,
         images: torch.Tensor,
         texts: List[str],
-        target_actions: torch.Tensor | None = None,
+        target_actions: Optional[torch.Tensor] = None,
     ) -> Dict[str, torch.Tensor]:
         """Pass-through to VLAModel.forward().
 
@@ -93,21 +114,33 @@ class VLALightningModule(pl.LightningModule):
     def _shared_step(self, batch: Dict[str, Any], stage: str) -> torch.Tensor:
         """Shared logic for train/val steps.
 
-        Both steps have identical forward pass; only logging differs
+        Supports both tokenized batches (input_ids + attention_mask) produced
+        by make_tokenized_collate_fn and plain text batches (texts key).
+        Both paths have identical forward pass; only logging differs
         (on_step=True for train, sync_dist=True for val).
 
         Args:
-            batch: Dict with "images", "texts", "actions" keys
+            batch: Dict with "images", "actions", and either "input_ids" or "texts"
             stage: "train" or "val" for metric naming
 
         Returns:
             Scalar loss tensor
         """
         images: torch.Tensor = batch["images"]
-        texts: List[str] = batch["texts"]
         target_actions: torch.Tensor = batch["actions"]
 
-        output = self.model(images, texts=texts, target_actions=target_actions)
+        # Route to tokenized or text path based on what the collate_fn produced
+        if "input_ids" in batch:
+            output = self.model(
+                images,
+                input_ids=batch["input_ids"],
+                attention_mask=batch.get("attention_mask"),
+                target_actions=target_actions,
+            )
+        else:
+            texts: List[str] = batch["texts"]
+            output = self.model(images, texts=texts, target_actions=target_actions)
+
         loss: torch.Tensor = output["loss"]
 
         # Log with different settings per stage
@@ -126,7 +159,7 @@ class VLALightningModule(pl.LightningModule):
         """Compute loss on a training batch.
 
         Args:
-            batch: Dict with "images", "texts", "actions"
+            batch: Dict with "images", "actions", and either "input_ids" or "texts"
             batch_idx: Index of current batch (unused, required by PL)
 
         Returns:
@@ -138,7 +171,7 @@ class VLALightningModule(pl.LightningModule):
         """Compute loss on a validation batch.
 
         Args:
-            batch: Dict with "images", "texts", "actions"
+            batch: Dict with "images", "actions", and either "input_ids" or "texts"
             batch_idx: Index of current batch (unused, required by PL)
 
         Returns:
@@ -154,14 +187,13 @@ class VLALightningModule(pl.LightningModule):
         action quality.
 
         Args:
-            batch: Dict with "images", "texts", "actions"
+            batch: Dict with "images", "actions", and either "input_ids" or "texts"
             batch_idx: Index of current batch (unused, required by PL)
 
         Returns:
             Scalar test loss
         """
         images: torch.Tensor = batch["images"]
-        texts: List[str] = batch["texts"]
         target_actions: torch.Tensor = batch["actions"]
 
         # Cross-entropy loss via shared step (also logs test/loss)
@@ -169,7 +201,16 @@ class VLALightningModule(pl.LightningModule):
 
         # Action-quality metrics in continuous action space [-1, 1]
         with torch.no_grad():
-            predicted_actions = self.model.predict(images, texts)
+            if "input_ids" in batch:
+                # Use forward() directly when pre-tokenized ids are available
+                pred_out = self.model(
+                    images,
+                    input_ids=batch["input_ids"],
+                    attention_mask=batch.get("attention_mask"),
+                )
+                predicted_actions = pred_out["actions"]
+            else:
+                predicted_actions = self.model.predict(images, batch["texts"])
 
         mse = torch.nn.functional.mse_loss(predicted_actions, target_actions)
         mae = torch.nn.functional.l1_loss(predicted_actions, target_actions)

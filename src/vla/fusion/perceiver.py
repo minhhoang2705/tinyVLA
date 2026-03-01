@@ -21,6 +21,7 @@ from typing import Optional
 
 import torch
 import torch.nn as nn
+from torch.utils.checkpoint import checkpoint as grad_checkpoint
 
 from vla.nn import MLP, CrossAttention, RMSNorm
 from vla.registry import FUSION_REGISTRY
@@ -41,6 +42,10 @@ class PerceiverResampler(nn.Module):
         vision_dim: Vision input dimension (if None, assumes same as dim)
         language_dim: Language input dimension (if None, assumes same as dim)
         dropout: Dropout rate
+        use_gradient_checkpointing: If True, recompute activations during backward
+            to reduce peak VRAM (~40-50% savings). Uses use_reentrant=False for
+            compatibility with PyTorch >= 2.0, AMP, and PyTorch Lightning.
+            Only active during training; eval mode uses normal forward pass.
 
     Example:
         >>> perceiver = PerceiverResampler(
@@ -63,10 +68,12 @@ class PerceiverResampler(nn.Module):
         vision_dim: Optional[int] = None,
         language_dim: Optional[int] = None,
         dropout: float = 0.1,
+        use_gradient_checkpointing: bool = False,
     ):
         super().__init__()
         self.dim = dim
         self.num_latents = num_latents
+        self.use_gradient_checkpointing = use_gradient_checkpointing
 
         # Learnable latent queries [1, num_latents, dim]
         self.latents = nn.Parameter(torch.randn(1, num_latents, dim) * 0.02)
@@ -126,8 +133,13 @@ class PerceiverResampler(nn.Module):
         latents = self.latents.expand(B, -1, -1)
 
         # Cross-attention layers: latents attend to context
+        # use_reentrant=False: required for PyTorch >= 2.0 + AMP + Lightning
+        # self.training guard: inference doesn't need backward, skip checkpointing
         for layer in self.layers:
-            latents = layer(latents, context)
+            if self.use_gradient_checkpointing and self.training:
+                latents = grad_checkpoint(layer, latents, context, use_reentrant=False)
+            else:
+                latents = layer(latents, context)
 
         return self.norm(latents)  # type: ignore[no-any-return]
 
@@ -186,6 +198,7 @@ class TemporalPerceiverResampler(nn.Module):
         vision_dim: Vision input dimension
         language_dim: Language input dimension
         dropout: Dropout rate
+        use_gradient_checkpointing: Forwarded to inner PerceiverResampler.
 
     Example:
         >>> temporal_perceiver = TemporalPerceiverResampler(
@@ -208,6 +221,7 @@ class TemporalPerceiverResampler(nn.Module):
         vision_dim: Optional[int] = None,
         language_dim: Optional[int] = None,
         dropout: float = 0.1,
+        use_gradient_checkpointing: bool = False,
     ):
         super().__init__()
         self.perceiver = PerceiverResampler(
@@ -218,6 +232,7 @@ class TemporalPerceiverResampler(nn.Module):
             vision_dim=vision_dim,
             language_dim=language_dim,
             dropout=dropout,
+            use_gradient_checkpointing=use_gradient_checkpointing,
         )
         # Temporal embeddings to distinguish frames
         self.temporal_embed = nn.Embedding(max_frames, dim)
@@ -273,9 +288,12 @@ class TemporalPerceiverResampler(nn.Module):
         else:
             context = vision_combined
 
-        # Expand latents and process
+        # Expand latents and process (respects use_gradient_checkpointing from inner perceiver)
         latents = self.perceiver.latents.expand(B, -1, -1)
         for layer in self.perceiver.layers:
-            latents = layer(latents, context)
+            if self.perceiver.use_gradient_checkpointing and self.perceiver.training:
+                latents = grad_checkpoint(layer, latents, context, use_reentrant=False)
+            else:
+                latents = layer(latents, context)
 
         return self.perceiver.norm(latents)  # type: ignore[no-any-return]

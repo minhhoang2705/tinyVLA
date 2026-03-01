@@ -298,7 +298,11 @@ class LeRobotVLADataset(Dataset):
             img = TF.resize(img, list(self.image_size))
 
         # Keep only RGB channels (drop alpha if present)
-        return cast(torch.Tensor, img[:3].float())
+        img = cast(torch.Tensor, img[:3].float())
+        
+        # ImageNet Normalization (required for DINOv2 / SigLIP)
+        img = TF.normalize(img, mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        return img
 
     def _process_text(self, raw: Dict) -> str:
         """Look up task description from task_index."""
