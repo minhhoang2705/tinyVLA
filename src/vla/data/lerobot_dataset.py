@@ -144,7 +144,7 @@ class LeRobotVLADataset(Dataset):
 
     def _load_dataset(self, repo_id: str, split: str, root: Optional[str]) -> Any:
         """Load the LeRobotDataset from HuggingFace or local path."""
-        from lerobot.common.datasets.lerobot_dataset import LeRobotDataset
+        from lerobot.datasets.lerobot_dataset import LeRobotDataset
 
         kwargs: Dict[str, Any] = {}
         if root is not None:

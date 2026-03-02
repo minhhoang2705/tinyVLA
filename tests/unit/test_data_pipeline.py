@@ -461,8 +461,8 @@ class TestLeRobotVLADataset:
             {
                 "lerobot": lerobot_mod,
                 "lerobot.common": lerobot_mod.common,
-                "lerobot.common.datasets": lerobot_mod.common.datasets,
-                "lerobot.common.datasets.lerobot_dataset": ds_mod,
+                "lerobot.datasets": lerobot_mod.datasets,
+                "lerobot.datasets.lerobot_dataset": ds_mod,
             },
         ):
             from vla.data.lerobot_dataset import LeRobotVLADataset
@@ -538,8 +538,8 @@ class TestLeRobotVLADataset:
             {
                 "lerobot": lerobot_mod,
                 "lerobot.common": lerobot_mod.common,
-                "lerobot.common.datasets": lerobot_mod.common.datasets,
-                "lerobot.common.datasets.lerobot_dataset": ds_mod,
+                "lerobot.datasets": lerobot_mod.datasets,
+                "lerobot.datasets.lerobot_dataset": ds_mod,
             },
         ):
             from vla.data.lerobot_dataset import LeRobotVLADataset
@@ -562,8 +562,8 @@ class TestLeRobotVLADataset:
             {
                 "lerobot": lerobot_mod,
                 "lerobot.common": lerobot_mod.common,
-                "lerobot.common.datasets": lerobot_mod.common.datasets,
-                "lerobot.common.datasets.lerobot_dataset": ds_mod,
+                "lerobot.datasets": lerobot_mod.datasets,
+                "lerobot.datasets.lerobot_dataset": ds_mod,
             },
         ):
             from vla.data.lerobot_dataset import LeRobotVLADataset
