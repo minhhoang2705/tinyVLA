@@ -70,7 +70,7 @@ class DiscreteActionHead(nn.Module):
             features = features.mean(dim=1)
 
         logits = self.mlp(features)
-        logits = logits.view(-1, self.action_dim, self.num_bins)
+        logits = logits.reshape(-1, self.action_dim, self.num_bins)
 
         # Get most likely bin per dimension
         bins = logits.argmax(dim=-1)
@@ -200,7 +200,7 @@ class GaussianActionHead(nn.Module):
 
         if return_logits:
             return actions, (mean, std)
-        return actions, None
+        return actions, std
 
     def compute_loss(
         self,

@@ -128,6 +128,11 @@ class VLALightningModule(pl.LightningModule):
         """
         images: torch.Tensor = batch["images"]
         target_actions: torch.Tensor = batch["actions"]
+        # Optional state supervision — None when dataset has no observation.state
+        target_state: Optional[torch.Tensor] = batch.get("states", None)
+
+        is_train = stage == "train"
+        log_kwargs = dict(prog_bar=True, on_step=is_train, on_epoch=True, sync_dist=not is_train)
 
         # Route to tokenized or text path based on what the collate_fn produced
         if "input_ids" in batch:
@@ -136,24 +141,27 @@ class VLALightningModule(pl.LightningModule):
                 input_ids=batch["input_ids"],
                 attention_mask=batch.get("attention_mask"),
                 target_actions=target_actions,
+                target_state=target_state,
             )
         else:
-            texts: List[str] = batch["texts"]
-            output = self.model(images, texts=texts, target_actions=target_actions)
+            output = self.model(
+                images,
+                texts=batch["texts"],
+                target_actions=target_actions,
+                target_state=target_state,
+            )
 
-        loss: torch.Tensor = output["loss"]
+        # Log action_loss and aux_loss separately for visibility in WandB/TensorBoard
+        action_loss: torch.Tensor = output.get("action_loss", output["loss"])
+        aux_loss: Optional[torch.Tensor] = output.get("aux_loss", None)
 
-        # Log with different settings per stage
-        is_train = stage == "train"
-        self.log(
-            f"{stage}/loss",
-            loss,
-            prog_bar=True,
-            on_step=is_train,
-            on_epoch=True,
-            sync_dist=not is_train,  # sync_dist for distributed val
-        )
-        return loss
+        if aux_loss is not None:
+            self.log(f"{stage}/action_loss", action_loss, **log_kwargs)
+            self.log(f"{stage}/aux_loss", aux_loss, **log_kwargs)
+
+        combined_loss: torch.Tensor = output["loss"]
+        self.log(f"{stage}/loss", combined_loss, **log_kwargs)
+        return combined_loss
 
     def training_step(self, batch: Dict[str, Any], batch_idx: int) -> torch.Tensor:
         """Compute loss on a training batch.

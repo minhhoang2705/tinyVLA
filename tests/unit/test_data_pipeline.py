@@ -15,6 +15,17 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 import torch
+import sys
+from unittest.mock import MagicMock
+
+# Mock lerobot package for testing
+lerobot_mock = MagicMock()
+sys.modules["lerobot"] = lerobot_mock
+sys.modules["lerobot.datasets"] = MagicMock()
+sys.modules["lerobot.datasets.lerobot_dataset"] = MagicMock()
+sys.modules["lerobot.datasets.lerobot_dataset"].LeRobotDataset = MagicMock
+
+
 from torch.utils.data import DataLoader
 
 from vla.data import DummyVLADataset, VLADataModule, vla_collate_fn
@@ -477,12 +488,19 @@ class TestLeRobotVLADataset:
         assert sample["image"].dtype == import_torch().float32
 
     def test_lerobot_image_value_range(self):
-        """Image pixel values stay in [0, 1]."""
+        """Image is float32, finite, and within ImageNet-normalized range.
+
+        After ImageNet normalization (required for DINOv2/SigLIP), values are
+        outside [0, 1]. Typical range: ~[-2.5, 2.7].
+        """
         adapter, _ = self._make_adapter()
 
         img = adapter[0]["image"]
-        assert img.min() >= 0.0
-        assert img.max() <= 1.0
+        assert img.dtype == import_torch().float32
+        assert import_torch().isfinite(img).all()
+        # ImageNet-normalized range (approx): [-2.5, 2.7]
+        assert img.min() >= -3.0
+        assert img.max() <= 3.0
 
     def test_lerobot_text_lookup(self):
         """task_index is mapped to the correct task description string."""
@@ -556,6 +574,54 @@ class TestLeRobotVLADataset:
 
         with pytest.raises(KeyError, match="nonexistent"):
             _ = adapter[0]
+
+
+class TestLeRobotStateExtraction:
+    """Tests for optional observation.state extraction in LeRobotVLADataset."""
+
+    def test_process_state_normalizes_to_minus_one_one(self):
+        """_process_state clamps output to [-1, 1] using fixed-scale fallback."""
+        from vla.data.lerobot_dataset import LeRobotVLADataset
+        # Bypass __init__ — set required attributes manually
+        ds = LeRobotVLADataset.__new__(LeRobotVLADataset)
+        ds._state_mean = None  # forces fixed-scale normalization path
+        ds._state_std = None
+        result = ds._process_state({"observation.state": torch.tensor([0.0, 512.0, 3.14])})
+        assert result is not None
+        assert result.min() >= -1.0
+        assert result.max() <= 1.0
+
+    def test_process_state_returns_none_when_missing(self):
+        """_process_state returns None when observation.state key absent."""
+        from vla.data.lerobot_dataset import LeRobotVLADataset
+        ds = LeRobotVLADataset.__new__(LeRobotVLADataset)
+        ds._state_mean = None
+        ds._state_std = None
+        result = ds._process_state({})  # no observation.state key
+        assert result is None
+
+    def test_collate_fn_stacks_states(self):
+        """vla_collate_fn produces 'states' key when all samples have 'state'."""
+        from vla.data.collate_batch_samples import vla_collate_fn
+        samples = [
+            {"image": torch.rand(3, 224, 224), "text": "t", "action": torch.rand(2),
+             "state": torch.tensor([0.1, 0.2, 0.3])},
+            {"image": torch.rand(3, 224, 224), "text": "t", "action": torch.rand(2),
+             "state": torch.tensor([0.4, 0.5, 0.6])},
+        ]
+        batch = vla_collate_fn(samples)
+        assert "states" in batch
+        assert batch["states"].shape == (2, 3)
+
+    def test_collate_fn_omits_states_when_absent(self):
+        """vla_collate_fn omits 'states' key when samples lack 'state'."""
+        from vla.data.collate_batch_samples import vla_collate_fn
+        samples = [
+            {"image": torch.rand(3, 224, 224), "text": "t", "action": torch.rand(2)},
+            {"image": torch.rand(3, 224, 224), "text": "t", "action": torch.rand(2)},
+        ]
+        batch = vla_collate_fn(samples)
+        assert "states" not in batch
 
 
 def import_torch():

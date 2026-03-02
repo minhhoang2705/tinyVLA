@@ -82,7 +82,7 @@ class TrajectoryHead(nn.Module):
 
         if self.mode == "parallel":
             logits = self.predictor(features)
-            logits = logits.view(B, self.num_steps, self.action_dim, self.num_bins)
+            logits = logits.reshape(B, self.num_steps, self.action_dim, self.num_bins)
             bins = logits.argmax(dim=-1)
             from .action_utils import bins_to_continuous
 
@@ -97,7 +97,7 @@ class TrajectoryHead(nn.Module):
                 query = step_tokens[:, : t + 1]
                 out = self.transformer(query, features.unsqueeze(1))
                 logits = self.output_head(out[:, -1])
-                logits = logits.view(B, self.action_dim, self.num_bins)
+                logits = logits.reshape(B, self.action_dim, self.num_bins)
                 bins = logits.argmax(dim=-1)
                 from .action_utils import bins_to_continuous
 

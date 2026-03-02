@@ -54,7 +54,13 @@ class TestVisionBackboneProtocol:
         assert not validate_vision_backbone(vision)
 
     def test_missing_forward_method(self):
-        """Test that missing forward method fails protocol check."""
+        """Test protocol check with inherited forward from nn.Module.
+
+        Note: Python's @runtime_checkable only checks attribute existence,
+        not signatures. nn.Module always provides forward(), so isinstance
+        returns True even without a custom forward. Use validate functions
+        for strict validation.
+        """
 
         class NonCompliantVision(nn.Module):
             def __init__(self):
@@ -62,8 +68,8 @@ class TestVisionBackboneProtocol:
                 self.embed_dim = 768
 
         vision = NonCompliantVision()
-        # Has embed_dim but no forward method
-        assert not isinstance(vision, VisionBackboneProtocol)
+        # nn.Module provides forward() — protocol limitation: signature not checked
+        assert isinstance(vision, VisionBackboneProtocol)
 
 
 class TestLanguageBackboneProtocol:
@@ -144,13 +150,19 @@ class TestFusionModuleProtocol:
         assert validate_fusion_module(fusion)
 
     def test_missing_forward_method(self):
-        """Test that missing forward method fails protocol check."""
+        """Test protocol check with inherited forward from nn.Module.
+
+        Note: Python's @runtime_checkable only checks attribute existence,
+        not signatures. nn.Module always provides forward(), so isinstance
+        returns True even without a custom forward.
+        """
 
         class NonCompliantFusion(nn.Module):
             pass
 
         fusion = NonCompliantFusion()
-        assert not isinstance(fusion, FusionModuleProtocol)
+        # nn.Module provides forward() — protocol limitation: signature not checked
+        assert isinstance(fusion, FusionModuleProtocol)
 
 
 class TestActionHeadProtocol:
@@ -204,10 +216,10 @@ class TestProtocolIntegration:
     """Integration tests for protocols with real VLA components."""
 
     def test_timm_vision_backbone_protocol(self):
-        """Test that TimmVisionBackbone implements VisionBackboneProtocol."""
-        from vla.backbones.vision import TimmVisionBackbone
+        """Test that VisionBackbone implements VisionBackboneProtocol."""
+        from vla.backbones.vision import VisionBackbone
 
-        vision = TimmVisionBackbone(
+        vision = VisionBackbone(
             model_name="vit_tiny_patch16_224",
             pretrained=False,
         )

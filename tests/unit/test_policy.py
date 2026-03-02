@@ -239,6 +239,43 @@ class TestDiffusionActionHead:
         assert torch.allclose(actions, torch.zeros_like(actions))
 
 
+class TestAffordanceHead:
+    """Tests for auxiliary affordance head."""
+
+    def test_output_shape_from_sequence_input(self):
+        """AffordanceHead mean-pools [B, K, D] → [B, state_dim]."""
+        from vla.policy import AffordanceHead
+        head = AffordanceHead(input_dim=64, hidden_dim=32, state_dim=3)
+        features = torch.randn(4, 16, 64)  # [B, K, D]
+        out = head(features)
+        assert out.shape == (4, 3)
+
+    def test_output_shape_from_pooled_input(self):
+        """AffordanceHead accepts pre-pooled [B, D] input."""
+        from vla.policy import AffordanceHead
+        head = AffordanceHead(input_dim=64, hidden_dim=32, state_dim=3)
+        features = torch.randn(4, 64)  # [B, D]
+        out = head(features)
+        assert out.shape == (4, 3)
+
+    def test_compute_loss_returns_scalar(self):
+        """compute_loss returns a scalar MSE loss."""
+        from vla.policy import AffordanceHead
+        head = AffordanceHead(input_dim=64, hidden_dim=32, state_dim=3)
+        pred = torch.randn(4, 3)
+        target = torch.randn(4, 3)
+        loss = head.compute_loss(pred, target)
+        assert loss.shape == ()  # scalar
+
+    def test_loss_is_zero_for_perfect_prediction(self):
+        """MSE loss = 0 when pred == target."""
+        from vla.policy import AffordanceHead
+        head = AffordanceHead(input_dim=64, hidden_dim=32, state_dim=3)
+        x = torch.randn(4, 3)
+        loss = head.compute_loss(x, x)
+        assert loss.item() < 1e-6
+
+
 class TestRegistry:
     """Tests for action registry integration."""
 

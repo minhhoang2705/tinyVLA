@@ -84,6 +84,7 @@ class LeRobotVLADataset(Dataset):
         image_size: Tuple[int, int] = (224, 224),
         split: str = "train",
         normalize_actions: bool = True,
+        include_state: bool = True,
         root: Optional[str] = None,
     ):
         super().__init__()
@@ -115,6 +116,14 @@ class LeRobotVLADataset(Dataset):
         # Pre-load normalization stats (mean/std for actions)
         self._action_mean, self._action_std = self._load_action_stats()
 
+        # State observation support (optional — absent in most datasets)
+        self.include_state = include_state
+        self._has_state: bool = include_state and self._detect_state_key()
+        self._state_mean: Optional[torch.Tensor] = None
+        self._state_std: Optional[torch.Tensor] = None
+        if self._has_state:
+            self._state_mean, self._state_std = self._load_state_stats()
+
         logger.info(
             f"LeRobotVLADataset loaded: repo={repo_id}, split={split}, "
             f"len={len(self)}, image_key={self.image_key}, "
@@ -135,7 +144,7 @@ class LeRobotVLADataset(Dataset):
 
     def _load_dataset(self, repo_id: str, split: str, root: Optional[str]) -> Any:
         """Load the LeRobotDataset from HuggingFace or local path."""
-        from lerobot.datasets.lerobot_dataset import LeRobotDataset
+        from lerobot.common.datasets.lerobot_dataset import LeRobotDataset
 
         kwargs: Dict[str, Any] = {}
         if root is not None:
@@ -168,7 +177,7 @@ class LeRobotVLADataset(Dataset):
         """Extract available image/camera keys from dataset features."""
         # LeRobotDataset exposes features dict with data types
         features = getattr(self._lerobot_ds, "features", {})
-        return [k for k in features if k.startswith("observation.image")]
+        return [k for k in features if k.startswith("observation.images")]
 
     def _build_task_lookup(self) -> Dict[int, str]:
         """Build int → task description map from dataset metadata."""
@@ -217,11 +226,14 @@ class LeRobotVLADataset(Dataset):
         if not self.normalize_actions:
             return None, None
 
-        # LeRobotDataset stores stats in meta.stats or .stats
+        # LeRobotDataset stores stats in meta.stats (newer API) or .stats (older API).
+        # Validate it's a real dict before using, to avoid MagicMock / None issues.
         stats = None
         if hasattr(self._lerobot_ds, "meta") and hasattr(self._lerobot_ds.meta, "stats"):
-            stats = self._lerobot_ds.meta.stats
-        else:
+            candidate = self._lerobot_ds.meta.stats
+            if isinstance(candidate, dict):
+                stats = candidate
+        if stats is None:
             stats = getattr(self._lerobot_ds, "stats", None)
 
         if stats is None:
@@ -260,6 +272,7 @@ class LeRobotVLADataset(Dataset):
                 - "image": Float32 tensor [3, H, W] in range [0, 1].
                 - "text": Task instruction string.
                 - "action": Float32 tensor [action_dim] in range [-1, 1].
+                - "state": Float32 tensor [state_dim] in range [-1, 1] (optional).
 
         Raises:
             KeyError: If image_key is missing from the sample.
@@ -270,7 +283,64 @@ class LeRobotVLADataset(Dataset):
         text = self._process_text(raw)
         action = self._process_action(raw)
 
-        return {"image": image, "text": text, "action": action}
+        sample: Dict[str, Union[torch.Tensor, str]] = {"image": image, "text": text, "action": action}
+        if self._has_state:
+            state = self._process_state(raw)
+            if state is not None:
+                sample["state"] = state
+        return sample
+
+
+    def _detect_state_key(self) -> bool:
+        """Check if observation.state exists in this dataset's features."""
+        features = getattr(self._lerobot_ds, "features", {})
+        return "observation.state" in features
+
+    def _load_state_stats(self) -> Tuple[Optional[torch.Tensor], Optional[torch.Tensor]]:
+        """Load observation.state mean/std from dataset stats for normalization."""
+        stats = None
+        if hasattr(self._lerobot_ds, "meta") and hasattr(self._lerobot_ds.meta, "stats"):
+            candidate = self._lerobot_ds.meta.stats
+            if isinstance(candidate, dict):
+                stats = candidate
+        if stats is None:
+            stats = getattr(self._lerobot_ds, "stats", None)
+
+        if stats is None:
+            logger.warning("No stats found; state will use fixed-scale normalization.")
+            return None, None
+
+        state_stats = stats.get("observation.state", {})
+        mean = state_stats.get("mean", None)
+        std = state_stats.get("std", None)
+
+        if mean is None or std is None:
+            logger.warning("observation.state mean/std missing; using fixed-scale normalization.")
+            return None, None
+
+        mean_t = torch.tensor(mean, dtype=torch.float32)
+        std_t = torch.clamp(torch.tensor(std, dtype=torch.float32), min=1e-6)
+        logger.info("Loaded observation.state normalization stats.")
+        return mean_t, std_t
+
+    def _process_state(self, raw: Dict) -> Optional[torch.Tensor]:
+        """Extract and normalize observation.state to [-1, 1]."""
+        state = raw.get("observation.state", None)
+        if state is None:
+            return None
+
+        if not isinstance(state, torch.Tensor):
+            state = torch.tensor(state, dtype=torch.float32)
+        state = state.float()
+
+        # Normalize using stats if available, else fixed scale
+        if self._state_mean is not None and self._state_std is not None:
+            state = (state - self._state_mean) / self._state_std
+        else:
+            # Fixed scale: maps pixel range [0, 512] → [-1, 1]
+            state = state / 256.0 - 1.0
+
+        return torch.clamp(state, -1.0, 1.0)
 
     def _process_image(self, raw: Dict) -> torch.Tensor:
         """Convert raw LeRobot image to [3, H, W] float32 in [0, 1]."""
@@ -299,7 +369,7 @@ class LeRobotVLADataset(Dataset):
 
         # Keep only RGB channels (drop alpha if present)
         img = cast(torch.Tensor, img[:3].float())
-        
+
         # ImageNet Normalization (required for DINOv2 / SigLIP)
         img = TF.normalize(img, mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
         return img

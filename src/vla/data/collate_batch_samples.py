@@ -21,11 +21,12 @@ if TYPE_CHECKING:
     from transformers import PreTrainedTokenizerBase
 
 
-def vla_collate_fn(batch: List[Dict[str, Any]]) -> Dict[str, torch.Tensor | List[str]]:
+def vla_collate_fn(batch: List[Dict[str, Any]]) -> Dict[str, Any]:
     """Collate VLA samples into a batch.
 
     Stacks image and action tensors along batch dimension, and collects
-    text instructions into a list.
+    text instructions into a list. Optionally stacks state tensors when
+    every sample in the batch contains a "state" key.
 
     Args:
         batch: List of sample dictionaries from DummyVLADataset
@@ -36,6 +37,7 @@ def vla_collate_fn(batch: List[Dict[str, Any]]) -> Dict[str, torch.Tensor | List
             - images: Stacked image tensor [B, C, H, W]
             - texts: List of text strings [B]
             - actions: Stacked action tensor [B, action_dim]
+            - states: Stacked state tensor [B, state_dim] (only when all samples have "state")
 
     Example:
         >>> from vla.data import DummyVLADataset
@@ -56,11 +58,15 @@ def vla_collate_fn(batch: List[Dict[str, Any]]) -> Dict[str, torch.Tensor | List
     # Stack actions: List of [action_dim] -> [B, action_dim]
     actions = torch.stack([sample["action"] for sample in batch])
 
-    return {
+    result: Dict[str, Any] = {
         "images": images,
         "texts": texts,
         "actions": actions,
     }
+    # Stack state only when every sample has it — partial batches drop silently to avoid shape errors
+    if all("state" in sample for sample in batch):
+        result["states"] = torch.stack([sample["state"] for sample in batch])
+    return result
 
 
 def make_tokenized_collate_fn(
@@ -104,13 +110,16 @@ def make_tokenized_collate_fn(
             return_tensors="pt",
         )
 
-        return {
+        result = {
             "images": images,
             "input_ids": encoded["input_ids"],           # [B, max_length]
             "attention_mask": encoded["attention_mask"],  # [B, max_length]
             "actions": actions,
             "texts": texts,  # Keep for debugging/logging
         }
+        if all("state" in sample for sample in batch):
+            result["states"] = torch.stack([sample["state"] for sample in batch])
+        return result
 
     return collate_fn
 

@@ -9,6 +9,7 @@ import torch
 
 from vla.models import (
     ActionConfig,
+    AffordanceConfig,
     FusionConfig,
     LanguageConfig,
     TemporalVLAModel,
@@ -372,3 +373,67 @@ class TestRegistryIntegration:
         assert isinstance(model, VLAModel)
         assert hasattr(model, "vision")
         assert hasattr(model, "action_head")
+
+
+class TestVLAModelAffordance:
+    """Tests for VLAModel auxiliary affordance head integration."""
+
+    def _make_affordance_config(self):
+        from vla.models import AffordanceConfig
+        return VLAConfig(
+            vision=VisionConfig(
+                name="timm_vit",
+                model_name="vit_tiny_patch16_224",
+                pretrained=False,
+                frozen=False,
+            ),
+            language=LanguageConfig(model_name="gpt2", frozen=False),
+            fusion=FusionConfig(num_latents=16, dim=192),
+            action=ActionConfig(action_dim=2),
+            affordance=AffordanceConfig(enabled=True, state_dim=3, hidden_dim=32),
+            auxiliary_loss_weight=0.1,
+        )
+
+    def test_affordance_head_built_when_enabled(self):
+        """Model has affordance_head when config.affordance.enabled=True."""
+        model = VLAModel(self._make_affordance_config())
+        assert model.affordance_head is not None
+
+    def test_affordance_head_none_when_disabled(self):
+        """Model has no affordance_head when config.affordance.enabled=False (default)."""
+        config = VLAConfig(
+            vision=VisionConfig(model_name="vit_tiny_patch16_224", pretrained=False),
+        )
+        model = VLAModel(config)
+        assert model.affordance_head is None
+
+    def test_aux_loss_in_output_when_target_state_provided(self, dummy_image, dummy_text):
+        """Forward returns aux_loss and action_loss when target_state given."""
+        model = VLAModel(self._make_affordance_config())
+        target_state = torch.randn(2, 3)
+        target_actions = torch.rand(2, 2) * 2 - 1  # valid [-1, 1]
+        output = model(
+            dummy_image,
+            texts=dummy_text,
+            target_actions=target_actions,
+            target_state=target_state,
+        )
+        assert "aux_loss" in output
+        assert "action_loss" in output
+        assert output["aux_loss"].shape == ()
+
+    def test_no_aux_loss_without_target_state(self, dummy_image, dummy_text):
+        """Forward has no aux_loss when target_state=None."""
+        model = VLAModel(self._make_affordance_config())
+        output = model(dummy_image, texts=dummy_text)
+        assert "aux_loss" not in output
+
+    def test_backward_compat_no_affordance(self, dummy_image, dummy_text):
+        """Default VLAConfig (no affordance) forward pass unchanged."""
+        config = VLAConfig(
+            vision=VisionConfig(model_name="vit_tiny_patch16_224", pretrained=False),
+        )
+        model = VLAModel(config)
+        output = model(dummy_image, texts=dummy_text)
+        assert "actions" in output
+        assert "aux_loss" not in output
