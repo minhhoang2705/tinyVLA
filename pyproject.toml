@@ -33,6 +33,13 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+eval = [
+    "gymnasium>=0.29.0",
+    "gym-pusht>=0.1.0",
+    "pymunk>=6.0,<7.0",
+    "imageio>=2.34.0",
+    "imageio-ffmpeg>=0.4.9",
+]
 dev = [
     "pytest>=8.0.0",
     "pytest-cov>=4.0.0",
