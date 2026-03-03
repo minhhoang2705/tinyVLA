@@ -159,3 +159,6 @@ requirements-lock.txt
 .mypy_cache/
 .ruff_cache/
 __pycache__
+
+# Claude Code internal
+.claude/
