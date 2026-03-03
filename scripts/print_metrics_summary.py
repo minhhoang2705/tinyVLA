@@ -9,7 +9,7 @@ def print_summary(csv_path):
     
     print(f"--- Training Summary ---")
     print(f"Total Steps: {df['step'].max()}")
-    print(f"Total Epochs: {df['epoch'].max() + 1}")
+    print(f"Total Epochs: {df['epoch'].max()}")
     
     print("\n--- Validation Loss Timeline ---")
     for _, row in val_loss.iterrows():

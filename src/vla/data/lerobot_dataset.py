@@ -160,7 +160,7 @@ class LeRobotVLADataset(Dataset):
         if not available:
             raise KeyError(
                 f"No image keys found in dataset {self.repo_id}. "
-                f"Expected keys like 'observation.images.<cam>'."
+                f"Expected keys like 'observation.images.<cam>' or 'observation.image'."
             )
 
         if image_key is None:
@@ -177,7 +177,7 @@ class LeRobotVLADataset(Dataset):
         """Extract available image/camera keys from dataset features."""
         # LeRobotDataset exposes features dict with data types
         features = getattr(self._lerobot_ds, "features", {})
-        return [k for k in features if k.startswith("observation.images")]
+        return [k for k in features if k.startswith("observation.image")]
 
     def _build_task_lookup(self) -> Dict[int, str]:
         """Build int → task description map from dataset metadata."""
