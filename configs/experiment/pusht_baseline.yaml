@@ -6,14 +6,23 @@ defaults:
 data:
   repo_id: lerobot/pusht
   # Auto-detect thường sẽ tìm thấy observation.image, nhưng mình cứ khai báo rõ ràng
-  image_key: observation.image  
+  image_key: observation.image
   action_dim: 2
+  # PushT state is [agent_x, agent_y, block_x, block_y, block_angle] (5D).
+  # Slice indices 2:5 to get block state only — the affordance head predicts
+  # block position + angle, NOT agent position.
+  state_indices: [2, 5]
 
 model:
   action:
     # Push-T chỉ dùng hành động 2D (x, y) để đẩy khối
     action_dim: 2
     num_bins: 256
+  affordance:
+    enabled: true
+    # Predicts block state: [block_x, block_y, block_angle] = 3D
+    state_dim: 3
+    hidden_dim: 256
 
 train:
   epochs: 50
@@ -23,3 +32,7 @@ train:
   precision: "16-mixed"      # Kích hoạt Tensor Cores của RTX 4070Ti để train nhanh hơn
   log_every_n_steps: 10
   use_wandb: false           # Đổi thành true nếu sếp muốn log lên Weights & Biases
+  # Early stopping was too aggressive — fired at epoch 12/100 while loss still
+  # dropping 47%. Give the model more room to converge.
+  patience: 20
+  min_delta: 0.0001

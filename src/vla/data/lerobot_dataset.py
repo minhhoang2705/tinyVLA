@@ -37,6 +37,17 @@ from vla.utils import setup_logger
 
 logger = setup_logger(__name__)
 
+# Known task descriptions for common LeRobot datasets.
+# Used as fallback when dataset metadata doesn't expose task text —
+# prevents train/eval mismatch where training sees "perform the task"
+# but evaluation uses the real instruction string.
+REPO_TASK_DEFAULTS: Dict[str, str] = {
+    "lerobot/pusht": "Push the T-shaped block onto the T-shaped target.",
+    "lerobot/aloha_sim_transfer_cube_human": (
+        "Transfer the cube from one hand to the other."
+    ),
+}
+
 
 class LeRobotVLADataset(Dataset):
     """Adapter that wraps LeRobotDataset to match tinyVLA's sample format.
@@ -55,6 +66,9 @@ class LeRobotVLADataset(Dataset):
         split: Dataset split to load. Default: "train".
         normalize_actions: If True, normalizes actions to [-1, 1] using
             stats.json mean/std. Default: True.
+        state_indices: Slice of observation.state to return. For PushT,
+            use [2, 5] to get block state (block_x, block_y, block_angle)
+            instead of agent position (indices 0:2).
         root: Local path if dataset is already downloaded. If None,
             downloads from HuggingFace Hub.
 
@@ -85,6 +99,7 @@ class LeRobotVLADataset(Dataset):
         split: str = "train",
         normalize_actions: bool = True,
         include_state: bool = True,
+        state_indices: Optional[Tuple[int, int]] = None,
         root: Optional[str] = None,
     ):
         super().__init__()
@@ -94,6 +109,7 @@ class LeRobotVLADataset(Dataset):
         self.image_size = image_size
         self.split = split
         self.normalize_actions = normalize_actions
+        self.state_indices = state_indices
 
         # Load the underlying LeRobot dataset
         self._lerobot_ds: Any = self._load_dataset(repo_id, split, root)
@@ -127,7 +143,8 @@ class LeRobotVLADataset(Dataset):
         logger.info(
             f"LeRobotVLADataset loaded: repo={repo_id}, split={split}, "
             f"len={len(self)}, image_key={self.image_key}, "
-            f"action_dim={self.action_dim}, tasks={len(self._task_lookup)}"
+            f"action_dim={self.action_dim}, tasks={len(self._task_lookup)}, "
+            f"state_indices={self.state_indices}"
         )
 
     def _import_lerobot(self) -> None:
@@ -198,10 +215,15 @@ class LeRobotVLADataset(Dataset):
                     lookup[idx] = desc
 
         if not lookup:
+            # Use repo-specific fallback so train text matches eval text.
+            # Without this, the language encoder sees completely different
+            # embeddings at train vs eval time → 0% success rate.
+            fallback_text = REPO_TASK_DEFAULTS.get(self.repo_id, "perform the task")
             logger.warning(
-                "Could not build task lookup from dataset metadata. "
-                "Text will default to 'perform the task'."
+                f"Could not build task lookup from dataset metadata. "
+                f"Using fallback: '{fallback_text}'"
             )
+            return {0: fallback_text}
         return lookup
 
     def _get_native_action_dim(self) -> int:
@@ -320,11 +342,23 @@ class LeRobotVLADataset(Dataset):
 
         mean_t = torch.tensor(mean, dtype=torch.float32)
         std_t = torch.clamp(torch.tensor(std, dtype=torch.float32), min=1e-6)
+
+        # Apply state_indices slicing to stats too, so dimensions match
+        if self.state_indices is not None:
+            start, end = self.state_indices
+            mean_t = mean_t[start:end]
+            std_t = std_t[start:end]
+
         logger.info("Loaded observation.state normalization stats.")
         return mean_t, std_t
 
     def _process_state(self, raw: Dict) -> Optional[torch.Tensor]:
-        """Extract and normalize observation.state to [-1, 1]."""
+        """Extract and normalize observation.state to [-1, 1].
+
+        When state_indices is set (e.g. (2, 5) for PushT), only the specified
+        slice is returned. PushT full state is [agent_x, agent_y, block_x,
+        block_y, block_angle] — we want block state only (indices 2:5).
+        """
         state = raw.get("observation.state", None)
         if state is None:
             return None
@@ -332,6 +366,11 @@ class LeRobotVLADataset(Dataset):
         if not isinstance(state, torch.Tensor):
             state = torch.tensor(state, dtype=torch.float32)
         state = state.float()
+
+        # Slice to requested dimensions before normalization
+        if self.state_indices is not None:
+            start, end = self.state_indices
+            state = state[start:end]
 
         # Normalize using stats if available, else fixed scale
         if self._state_mean is not None and self._state_std is not None:
