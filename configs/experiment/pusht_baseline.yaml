@@ -8,10 +8,8 @@ data:
   # Auto-detect thường sẽ tìm thấy observation.image, nhưng mình cứ khai báo rõ ràng
   image_key: observation.image
   action_dim: 2
-  # PushT state is [agent_x, agent_y, block_x, block_y, block_angle] (5D).
-  # Slice indices 2:5 to get block state only — the affordance head predicts
-  # block position + angle, NOT agent position.
-  state_indices: [2, 5]
+  # PushT observation.state is [agent_x, agent_y] (2D only — no block state).
+  # No slicing needed.
 
 model:
   action:
@@ -20,8 +18,9 @@ model:
     num_bins: 256
   affordance:
     enabled: true
-    # Predicts block state: [block_x, block_y, block_angle] = 3D
-    state_dim: 3
+    # Predicts agent position: [agent_x, agent_y] = 2D
+    # (block state not available in lerobot/pusht observation.state)
+    state_dim: 2
     hidden_dim: 256
 
 train:
